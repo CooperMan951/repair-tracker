@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORMS Repair Tracker</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --black:#111111;
+    --white:#ffffff;
+    --gray-bg:#f4f4f4;
+    --gray-border:#dcdcdc;
+    --gray-text:#555;
+    --yellow:#ffe14d;
+    --green:#1d8a3f;
+    --red:#c0392b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI', Arial, sans-serif;
+    background:var(--gray-bg);
+    color:var(--black);
+  }
+  header{
+    background:var(--black);
+    color:var(--white);
+    padding:18px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  header h1{
+    margin:0;
+    font-size:1.3rem;
+    letter-spacing:0.5px;
+  }
+  header span{
+    font-size:0.75rem;
+    color:#bbb;
+  }
+  .container{
+    max-width:900px;
+    margin:0 auto;
+    padding:20px;
+  }
+  .card{
+    background:var(--white);
+    border:1px solid var(--gray-border);
+    border-radius:8px;
+    padding:20px;
+    margin-bottom:24px;
+  }
+  .card h2{
+    margin-top:0;
+    font-size:1.05rem;
+    border-bottom:2px solid var(--black);
+    padding-bottom:8px;
+  }
+  .branch-toggle{
+    display:flex;
+    gap:10px;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+  }
+  .branch-btn{
+    flex:1;
+    min-width:110px;
+    padding:12px;
+    text-align:center;
+    border:2px solid var(--black);
+    border-radius:6px;
+    cursor:pointer;
+    font-weight:600;
+    background:var(--white);
+    user-select:none;
+  }
+  .branch-btn.selected{
+    background:var(--black);
+    color:var(--white);
+  }
+  label{
+    display:block;
+    font-size:0.8rem;
+    font-weight:600;
+    margin-top:12px;
+    margin-bottom:4px;
+    color:var(--gray-text);
+  }
+  input[type=text]{
+    width:100%;
+    padding:10px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.95rem;
+  }
+  button.submit{
+    margin-top:18px;
+    width:100%;
+    padding:13px;
+    background:var(--black);
+    color:var(--white);
+    border:none;
+    border-radius:6px;
+    font-size:1rem;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button.submit:hover{ background:#333; }
+  .filters{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .filter-btn{
+    padding:8px 14px;
+    border:1px solid var(--black);
+    border-radius:20px;
+    background:var(--white);
+    cursor:pointer;
+    font-size:0.85rem;
+  }
+  .filter-btn.active{
+    background:var(--black);
+    color:var(--white);
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:0.85rem;
+  }
+  th,td{
+    padding:9px 8px;
+    border-bottom:1px solid var(--gray-border);
+    text-align:left;
+    vertical-align:middle;
+  }
+  th{
+    color:var(--gray-text);
+    font-size:0.72rem;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+  }
+  .badge{
+    display:inline-block;
+    padding:3px 9px;
+    border-radius:12px;
+    font-size:0.72rem;
+    font-weight:700;
+  }
+  .badge.pending{ background:var(--yellow); color:#5a4500; }
+  .badge.received{ background:#d7f2dd; color:var(--green); }
+  .badge.collected{ background:#dbe6f7; color:#1d4f8a; }
+  .badge.overdue{ background:#fbe0dc; color:var(--red); margin-left:6px; }
+  .receive-btn{
+    padding:6px 10px;
+    background:var(--green);
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.78rem;
+  }
+  .receive-btn:hover{ background:#176b32; }
+  .collect-btn{
+    padding:6px 10px;
+    background:#1d4f8a;
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.78rem;
+    margin-top:4px;
+  }
+  .collect-btn:hover{ background:#163c69; }
+  .search-wrap{
+    margin-bottom:14px;
+  }
+  .search-wrap input{
+    width:100%;
+    padding:10px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.9rem;
+  }
+  .section-toggle{
+    display:flex;
+    gap:8px;
+    margin-bottom:16px;
+  }
+  .section-toggle .filter-btn{ flex:1; text-align:center; }
+  .overdue-banner{
+    display:none;
+    background:#fbe0dc;
+    color:var(--red);
+    border:1px solid #f0b8af;
+    border-radius:6px;
+    padding:12px 14px;
+    font-size:0.85rem;
+    font-weight:600;
+    margin-bottom:16px;
+  }
+  .overdue-banner.show{ display:block; }
+  .received-info{
+    font-size:0.75rem;
+    color:var(--gray-text);
+  }
+  .empty{
+    text-align:center;
+    padding:30px;
+    color:var(--gray-text);
+  }
+  .toast{
+    position:fixed;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    background:var(--black);
+    color:white;
+    padding:10px 20px;
+    border-radius:6px;
+    font-size:0.85rem;
+    opacity:0;
+    transition:opacity 0.3s;
+    pointer-events:none;
+  }
+  .toast.show{ opacity:1; }
+  .modal-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.5);
+    align-items:center;
+    justify-content:center;
+    z-index:50;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal{
+    background:white;
+    border-radius:8px;
+    padding:24px;
+    width:90%;
+    max-width:340px;
+  }
+  .modal h3{ margin-top:0; }
+  .modal-buttons{
+    display:flex;
+    gap:10px;
+    margin-top:18px;
+  }
+  .modal-buttons button{
+    flex:1;
+    padding:10px;
+    border-radius:6px;
+    border:none;
+    cursor:pointer;
+    font-weight:600;
+  }
+  .modal-buttons .cancel{ background:var(--gray-bg); border:1px solid var(--gray-border); }
+  .modal-buttons .confirm{ background:var(--green); color:white; }
+  @media (max-width:600px){
+    table, thead, tbody, th, td, tr{ display:block; }
+    thead{ display:none; }
+    tr{
+      margin-bottom:12px;
+      border:1px solid var(--gray-border);
+      border-radius:6px;
+      padding:10px;
+    }
+    td{
+      border:none;
+      display:flex;
+      justify-content:space-between;
+      padding:5px 0;
+    }
+    td::before{
+      content:attr(data-label);
+      font-weight:600;
+      color:var(--gray-text);
+      font-size:0.72rem;
+      text-transform:uppercase;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ORMS Repair Tracker</h1>
+  <span id="connStatus">connecting…</span>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h2>Log a Repair</h2>
+    <label>To Branch</label>
+    <div class="branch-toggle" id="branchToggle">
+      <div class="branch-btn" data-branch="Cape Town">Cape Town</div>
+      <div class="branch-btn" data-branch="Bellville">Bellville</div>
+      <div class="branch-btn" data-branch="Somerset">Somerset</div>
+    </div>
+
+    <label for="name">Name</label>
+    <input type="text" id="name" placeholder="Requested by">
+
+    <label for="contact">Contact Number</label>
+    <input type="text" id="contact" placeholder="e.g. 021 469 1962">
+
+    <label for="jobNumber">Job Number</label>
+    <input type="text" id="jobNumber" placeholder="e.g. O10S009119">
+
+    <label for="item">Item</label>
+    <input type="text" id="item" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
+
+    <button class="submit" id="submitBtn">Log Repair</button>
+  </div>
+
+  <div class="card">
+    <h2>Repairs</h2>
+
+    <div class="overdue-banner" id="overdueBanner"></div>
+
+    <div class="search-wrap">
+      <input type="text" id="searchInput" placeholder="Search by name, contact, job number or item…">
+    </div>
+
+    <div class="section-toggle" id="sectionToggle">
+      <div class="filter-btn active" data-section="active">Active</div>
+      <div class="filter-btn" data-section="collected">Collected</div>
+    </div>
+
+    <div id="activeSection">
+      <div class="filters" id="filters">
+        <div class="filter-btn active" data-filter="All">All</div>
+        <div class="filter-btn" data-filter="Cape Town">Cape Town</div>
+        <div class="filter-btn" data-filter="Bellville">Bellville</div>
+        <div class="filter-btn" data-filter="Somerset">Somerset</div>
+        <div class="filter-btn" data-filter="Pending">Pending only</div>
+      </div>
+
+      <table id="repairsTable">
+        <thead>
+          <tr>
+            <th>Branch</th>
+            <th>Job #</th>
+            <th>Item</th>
+            <th>Name</th>
+            <th>Contact</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="repairsBody"></tbody>
+      </table>
+      <div class="empty" id="emptyState" style="display:none;">No repairs logged yet.</div>
+    </div>
+
+    <div id="collectedSection" style="display:none;">
+      <table id="collectedTable">
+        <thead>
+          <tr>
+            <th>Branch</th>
+            <th>Job #</th>
+            <th>Item</th>
+            <th>Name</th>
+            <th>Contact</th>
+            <th>Collected</th>
+          </tr>
+        </thead>
+        <tbody id="collectedBody"></tbody>
+      </table>
+      <div class="empty" id="collectedEmptyState" style="display:none;">No collected repairs yet.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="receiveModal">
+  <div class="modal">
+    <h3>Confirm Receipt</h3>
+    <label for="receivedByInput">Your name</label>
+    <input type="text" id="receivedByInput" placeholder="Who is ticking this off?">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelReceive">Cancel</button>
+      <button class="confirm" id="confirmReceive">Mark Received</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="collectModal">
+  <div class="modal">
+    <h3>Confirm Collection</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelCollect">Cancel</button>
+      <button class="confirm" id="confirmCollect">Mark Collected</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let selectedBranch = null;
+  let activeFilter = "All";
+  let pendingReceiveId = null;
+  let pendingCollectId = null;
+  let repairs = [];
+  let searchQuery = "";
+  let activeSection = "active";
+
+  const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    renderTable();
+  });
+
+  document.getElementById('sectionToggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeSection = btn.dataset.section;
+    document.getElementById('activeSection').style.display = activeSection === 'active' ? 'block' : 'none';
+    document.getElementById('collectedSection').style.display = activeSection === 'collected' ? 'block' : 'none';
+    renderTable();
+  });
+
+  const branchToggle = document.getElementById('branchToggle');
+  branchToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.branch-btn');
+    if(!btn) return;
+    document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedBranch = btn.dataset.branch;
+  });
+
+  document.getElementById('filters').addEventListener('click', (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+    renderTable();
+  });
+
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2500);
+  }
+
+  document.getElementById('submitBtn').addEventListener('click', async () => {
+    const name = document.getElementById('name').value.trim();
+    const contact = document.getElementById('contact').value.trim();
+    const jobNumber = document.getElementById('jobNumber').value.trim();
+    const item = document.getElementById('item').value.trim();
+
+    if(!selectedBranch){ showToast('Please select a branch'); return; }
+    if(!name || !jobNumber || !item){ showToast('Please fill in Name, Job Number and Item'); return; }
+
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Logging…';
+
+    const { error } = await sb.from('repairs').insert({
+      branch: selectedBranch,
+      name: name,
+      contact_number: contact,
+      job_number: jobNumber,
+      item: item
+    });
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Log Repair';
+
+    if(error){
+      showToast('Error: ' + error.message);
+      return;
+    }
+
+    document.getElementById('name').value = '';
+    document.getElementById('contact').value = '';
+    document.getElementById('jobNumber').value = '';
+    document.getElementById('item').value = '';
+    document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
+    selectedBranch = null;
+    showToast('Repair logged');
+  });
+
+  function openReceiveModal(id){
+    pendingReceiveId = id;
+    document.getElementById('receivedByInput').value = '';
+    document.getElementById('receiveModal').classList.add('show');
+  }
+  document.getElementById('cancelReceive').addEventListener('click', () => {
+    document.getElementById('receiveModal').classList.remove('show');
+    pendingReceiveId = null;
+  });
+  document.getElementById('confirmReceive').addEventListener('click', async () => {
+    const receivedBy = document.getElementById('receivedByInput').value.trim();
+    if(!receivedBy){ showToast('Please enter your name'); return; }
+    const { error } = await sb.from('repairs').update({
+      received: true,
+      received_by: receivedBy,
+      received_at: new Date().toISOString()
+    }).eq('id', pendingReceiveId);
+
+    document.getElementById('receiveModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); return; }
+    showToast('Marked as received');
+    pendingReceiveId = null;
+  });
+
+  function openCollectModal(id){
+    pendingCollectId = id;
+    document.getElementById('collectModal').classList.add('show');
+  }
+  document.getElementById('cancelCollect').addEventListener('click', () => {
+    document.getElementById('collectModal').classList.remove('show');
+    pendingCollectId = null;
+  });
+  document.getElementById('confirmCollect').addEventListener('click', async () => {
+    const { error } = await sb.from('repairs').update({
+      collected: true,
+      collected_at: new Date().toISOString()
+    }).eq('id', pendingCollectId);
+
+    document.getElementById('collectModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); return; }
+    showToast('Marked as collected');
+    pendingCollectId = null;
+  });
+
+  function matchesSearch(r){
+    if(!searchQuery) return true;
+    const haystack = [r.name, r.contact_number, r.job_number, r.item].join(' ').toLowerCase();
+    return haystack.includes(searchQuery);
+  }
+
+  function isOverdue(r){
+    if(!r.received || r.collected || !r.received_at) return false;
+    return (Date.now() - new Date(r.received_at).getTime()) > SIX_MONTHS_MS;
+  }
+
+  function renderTable(){
+    const overdueCount = repairs.filter(isOverdue).length;
+    const banner = document.getElementById('overdueBanner');
+    if(overdueCount > 0){
+      banner.textContent = `⚠ ${overdueCount} repair${overdueCount > 1 ? 's have' : ' has'} been received but not collected for over 6 months.`;
+      banner.classList.add('show');
+    } else {
+      banner.classList.remove('show');
+    }
+
+    const allRows = repairs.filter(matchesSearch);
+
+    // ACTIVE section (not yet collected)
+    let activeRows = allRows.filter(r => !r.collected);
+    if(activeFilter === 'Pending'){
+      activeRows = activeRows.filter(r => !r.received);
+    } else if(activeFilter !== 'All'){
+      activeRows = activeRows.filter(r => r.branch === activeFilter);
+    }
+
+    const body = document.getElementById('repairsBody');
+    const empty = document.getElementById('emptyState');
+    body.innerHTML = '';
+
+    if(activeRows.length === 0){
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+
+      activeRows.forEach(r => {
+        const tr = document.createElement('tr');
+        const overdue = isOverdue(r);
+        let statusHtml;
+        if(r.received){
+          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')}</span>`;
+        } else {
+          statusHtml = `<span class="badge pending">Pending</span>`;
+        }
+
+        let actionHtml = '';
+        if(!r.received){
+          actionHtml += `<button class="receive-btn" data-id="${r.id}" data-action="receive">Mark Received</button>`;
+        } else {
+          actionHtml += `<button class="collect-btn" data-id="${r.id}" data-action="collect">Mark Collected</button>`;
+        }
+
+        tr.innerHTML = `
+          <td data-label="Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="Job #">${escapeHtml(r.job_number)}</td>
+          <td data-label="Item">${escapeHtml(r.item)}</td>
+          <td data-label="Name">${escapeHtml(r.name)}</td>
+          <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
+          <td data-label="Status">${statusHtml}</td>
+          <td data-label="">${actionHtml}</td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    document.querySelectorAll('.receive-btn').forEach(btn => {
+      btn.addEventListener('click', () => openReceiveModal(btn.dataset.id));
+    });
+    document.querySelectorAll('.collect-btn').forEach(btn => {
+      btn.addEventListener('click', () => openCollectModal(btn.dataset.id));
+    });
+
+    // COLLECTED section
+    const collectedRows = allRows.filter(r => r.collected);
+    const cBody = document.getElementById('collectedBody');
+    const cEmpty = document.getElementById('collectedEmptyState');
+    cBody.innerHTML = '';
+
+    if(collectedRows.length === 0){
+      cEmpty.style.display = 'block';
+    } else {
+      cEmpty.style.display = 'none';
+      collectedRows.forEach(r => {
+        const tr = document.createElement('tr');
+        const collectedDate = r.collected_at ? new Date(r.collected_at).toLocaleString() : '';
+        tr.innerHTML = `
+          <td data-label="Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="Job #">${escapeHtml(r.job_number)}</td>
+          <td data-label="Item">${escapeHtml(r.item)}</td>
+          <td data-label="Name">${escapeHtml(r.name)}</td>
+          <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
+          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span></td>
+        `;
+        cBody.appendChild(tr);
+      });
+    }
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function loadRepairs(){
+    const { data, error } = await sb.from('repairs').select('*').order('created_at', { ascending: false });
+    if(error){ showToast('Load error: ' + error.message); return; }
+    repairs = data;
+    renderTable();
+  }
+
+  sb.channel('repairs-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => {
+      loadRepairs();
+    })
+    .subscribe((status) => {
+      const el = document.getElementById('connStatus');
+      if(status === 'SUBSCRIBED'){ el.textContent = 'live'; }
+    });
+
+  loadRepairs();
+</script>
+
+</body>
+</html>
