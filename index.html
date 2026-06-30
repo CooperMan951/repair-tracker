@@ -318,16 +318,16 @@
     </div>
 
     <label for="name">Name</label>
-    <input type="text" id="name" placeholder="Requested by">
+    <input type="text" id="name" autocomplete="off" placeholder="Requested by">
 
     <label for="contact">Contact Number</label>
-    <input type="text" id="contact" placeholder="e.g. 021 469 1962">
+    <input type="text" id="contact" autocomplete="off" placeholder="e.g. 021 469 1962">
 
     <label for="jobNumber">Job Number</label>
-    <input type="text" id="jobNumber" placeholder="e.g. O10S009119">
+    <input type="text" id="jobNumber" autocomplete="off" placeholder="e.g. O10S009119">
 
     <label for="item">Item</label>
-    <input type="text" id="item" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
+    <input type="text" id="item" autocomplete="off" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
 
     <button class="submit" id="submitBtn">Log Repair</button>
   </div>
@@ -338,7 +338,7 @@
     <div class="overdue-banner" id="overdueBanner"></div>
 
     <div class="search-wrap">
-      <input type="text" id="searchInput" placeholder="Search by name, contact, job number or item…">
+      <input type="text" id="searchInput" name="repair-search-query" autocomplete="off" placeholder="Search by name, contact, job number or item…">
     </div>
 
     <div class="section-toggle" id="sectionToggle">
@@ -399,7 +399,7 @@
   <div class="modal">
     <h3>Confirm Receipt</h3>
     <label for="receivedByInput">Your name</label>
-    <input type="text" id="receivedByInput" placeholder="Who is ticking this off?">
+    <input type="text" id="receivedByInput" autocomplete="off" placeholder="Who is ticking this off?">
     <div class="modal-buttons">
       <button class="cancel" id="cancelReceive">Cancel</button>
       <button class="confirm" id="confirmReceive">Mark Received</button>
@@ -425,7 +425,7 @@
     <h3>Delete Repair</h3>
     <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">This permanently removes the record. Admin PIN required.</p>
     <label for="deletePinInput">Admin PIN</label>
-    <input type="password" id="deletePinInput" inputmode="numeric" placeholder="Enter PIN">
+    <input type="password" id="deletePinInput" inputmode="numeric" autocomplete="off" placeholder="Enter PIN">
     <div class="modal-buttons">
       <button class="cancel" id="cancelDelete">Cancel</button>
       <button class="confirm" id="confirmDelete" style="background:var(--red);">Delete</button>
