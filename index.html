@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ORMS Repair Tracker</title>
@@ -801,6 +804,24 @@
     });
 
   loadRepairs();
+
+  // Defensive: some browsers restore or autofill form field values on page
+  // load/tab-restore regardless of the autocomplete attribute. The search
+  // box should always start empty, so force-clear it now and shortly after,
+  // since browser autofill can happen slightly after our own script runs.
+  function forceClearSearch(){
+    const input = document.getElementById('searchInput');
+    if(input && input.value !== ''){
+      input.value = '';
+      searchQuery = '';
+      renderTable();
+    }
+  }
+  forceClearSearch();
+  window.addEventListener('load', forceClearSearch);
+  window.addEventListener('pageshow', forceClearSearch);
+  setTimeout(forceClearSearch, 300);
+  setTimeout(forceClearSearch, 1000);
 </script>
 
 </body>
