@@ -341,7 +341,7 @@
     <div class="overdue-banner" id="overdueBanner"></div>
 
     <div class="search-wrap">
-      <input type="text" id="searchInput" name="repair-search-query" autocomplete="off" placeholder="Search by name, contact, job number or item…">
+      <input type="text" id="searchInput" name="qf-x83k2" autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other" readonly placeholder="Search by name, contact, job number or item…">
     </div>
 
     <div class="section-toggle" id="sectionToggle">
@@ -456,6 +456,9 @@
   document.getElementById('searchInput').addEventListener('input', (e) => {
     searchQuery = e.target.value.trim().toLowerCase();
     renderTable();
+  });
+  document.getElementById('searchInput').addEventListener('focus', (e) => {
+    e.target.removeAttribute('readonly');
   });
 
   document.getElementById('sectionToggle').addEventListener('click', (e) => {
