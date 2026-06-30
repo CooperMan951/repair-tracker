@@ -340,9 +340,7 @@
 
     <div class="overdue-banner" id="overdueBanner"></div>
 
-    <div class="search-wrap">
-      <input type="text" id="searchInput" name="qf-x83k2" autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other" readonly placeholder="Search by name, contact, job number or item…">
-    </div>
+    <div class="search-wrap" id="searchWrap"></div>
 
     <div class="section-toggle" id="sectionToggle">
       <div class="filter-btn active" data-section="active">Active</div>
@@ -453,12 +451,25 @@
 
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
 
+  // Build the search box dynamically (rather than static HTML) so browser
+  // autofill, which scans the page at load time and is known to ignore
+  // autocomplete=off for fields it heuristically matches as contact-related,
+  // does not get a chance to latch onto it. Also avoid trigger words like
+  // "name" / "contact" in the placeholder.
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.id = 'searchInput';
+  searchInput.name = 'qf-x83k2';
+  searchInput.autocomplete = 'off';
+  searchInput.setAttribute('data-lpignore', 'true');
+  searchInput.setAttribute('data-1p-ignore', 'true');
+  searchInput.setAttribute('data-form-type', 'other');
+  searchInput.placeholder = 'Search repairs…';
+  document.getElementById('searchWrap').appendChild(searchInput);
+
   document.getElementById('searchInput').addEventListener('input', (e) => {
     searchQuery = e.target.value.trim().toLowerCase();
     renderTable();
-  });
-  document.getElementById('searchInput').addEventListener('focus', (e) => {
-    e.target.removeAttribute('readonly');
   });
 
   document.getElementById('sectionToggle').addEventListener('click', (e) => {
