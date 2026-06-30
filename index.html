@@ -396,6 +396,8 @@
   <div class="modal">
     <h3>Confirm Collection</h3>
     <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
+    <label for="collectPhotoInput">Photo (optional)</label>
+    <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
     <div class="modal-buttons">
       <button class="cancel" id="cancelCollect">Cancel</button>
       <button class="confirm" id="confirmCollect">Mark Collected</button>
@@ -530,11 +532,37 @@
     pendingCollectId = null;
   });
   document.getElementById('confirmCollect').addEventListener('click', async () => {
+    const confirmBtn = document.getElementById('confirmCollect');
+    const fileInput = document.getElementById('collectPhotoInput');
+    const file = fileInput.files[0];
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = file ? 'Uploading…' : 'Saving…';
+
+    let photoUrl = null;
+    if(file){
+      const ext = file.name.split('.').pop();
+      const path = `${pendingCollectId}-${Date.now()}.${ext}`;
+      const { error: uploadError } = await sb.storage.from('collection-photos').upload(path, file);
+      if(uploadError){
+        showToast('Photo upload failed: ' + uploadError.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Mark Collected';
+        return;
+      }
+      const { data: urlData } = sb.storage.from('collection-photos').getPublicUrl(path);
+      photoUrl = urlData.publicUrl;
+    }
+
     const { error } = await sb.from('repairs').update({
       collected: true,
-      collected_at: new Date().toISOString()
+      collected_at: new Date().toISOString(),
+      collected_photo_url: photoUrl
     }).eq('id', pendingCollectId);
 
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Mark Collected';
+    fileInput.value = '';
     document.getElementById('collectModal').classList.remove('show');
     if(error){ showToast('Error: ' + error.message); return; }
     showToast('Marked as collected');
@@ -631,13 +659,16 @@
       collectedRows.forEach(r => {
         const tr = document.createElement('tr');
         const collectedDate = r.collected_at ? new Date(r.collected_at).toLocaleString() : '';
+        const photoHtml = r.collected_photo_url
+          ? `<br><a href="${escapeHtml(r.collected_photo_url)}" target="_blank" rel="noopener"><img src="${escapeHtml(r.collected_photo_url)}" alt="Collection photo" style="width:60px;height:60px;object-fit:cover;border-radius:4px;margin-top:4px;border:1px solid var(--gray-border);"></a>`
+          : '';
         tr.innerHTML = `
           <td data-label="Branch">${escapeHtml(r.branch)}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
           <td data-label="Item">${escapeHtml(r.item)}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
-          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span></td>
+          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${photoHtml}</td>
         `;
         cBody.appendChild(tr);
       });
