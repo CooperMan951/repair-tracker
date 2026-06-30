@@ -202,6 +202,16 @@
     border-radius:5px;
     font-size:0.9rem;
   }
+  /* Detection trick: Chrome applies :-webkit-autofill to fields it has
+     autofilled. Attaching a no-op animation to that pseudo-class lets us
+     catch an 'animationstart' JS event the instant autofill happens, so we
+     can immediately clear the field regardless of when Chrome decides to
+     fill it (page load, focus, or otherwise). */
+  @keyframes onAutoFillStart { from {} to {} }
+  input:-webkit-autofill{
+    animation-name: onAutoFillStart;
+    animation-duration: 0.001s;
+  }
   .section-toggle{
     display:flex;
     gap:8px;
@@ -466,6 +476,16 @@
   searchInput.setAttribute('data-form-type', 'other');
   searchInput.placeholder = 'Search repairs…';
   document.getElementById('searchWrap').appendChild(searchInput);
+
+  // Catch Chrome's autofill the instant it happens (see the CSS keyframe
+  // trick above) and immediately wipe it out, no matter when it fires.
+  searchInput.addEventListener('animationstart', (e) => {
+    if(e.animationName === 'onAutoFillStart'){
+      searchInput.value = '';
+      searchQuery = '';
+      renderTable();
+    }
+  });
 
   document.getElementById('searchInput').addEventListener('input', (e) => {
     searchQuery = e.target.value.trim().toLowerCase();
@@ -834,8 +854,9 @@
   forceClearSearch();
   window.addEventListener('load', forceClearSearch);
   window.addEventListener('pageshow', forceClearSearch);
-  setTimeout(forceClearSearch, 300);
-  setTimeout(forceClearSearch, 1000);
+  for(let i = 1; i <= 20; i++){
+    setTimeout(forceClearSearch, i * 150); // poll every 150ms for ~3 seconds
+  }
 </script>
 
 </body>
