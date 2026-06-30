@@ -178,6 +178,17 @@
     margin-top:4px;
   }
   .collect-btn:hover{ background:#163c69; }
+  .delete-btn{
+    padding:6px 10px;
+    background:var(--red);
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.78rem;
+    margin-top:4px;
+  }
+  .delete-btn:hover{ background:#962e23; }
   .search-wrap{
     margin-bottom:14px;
   }
@@ -371,6 +382,7 @@
             <th>Name</th>
             <th>Contact</th>
             <th>Collected</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="collectedBody"></tbody>
@@ -408,6 +420,19 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3>Delete Repair</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">This permanently removes the record. Admin PIN required.</p>
+    <label for="deletePinInput">Admin PIN</label>
+    <input type="password" id="deletePinInput" inputmode="numeric" placeholder="Enter PIN">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelDelete">Cancel</button>
+      <button class="confirm" id="confirmDelete" style="background:var(--red);">Delete</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
@@ -417,6 +442,8 @@
   let activeFilter = "All";
   let pendingReceiveId = null;
   let pendingCollectId = null;
+  let pendingDeleteId = null;
+  const ADMIN_PIN = "353";
   let repairs = [];
   let searchQuery = "";
   let activeSection = "active";
@@ -578,6 +605,28 @@
     pendingCollectId = null;
   });
 
+  function openDeleteModal(id){
+    pendingDeleteId = id;
+    document.getElementById('deletePinInput').value = '';
+    document.getElementById('deleteModal').classList.add('show');
+  }
+  document.getElementById('cancelDelete').addEventListener('click', () => {
+    document.getElementById('deleteModal').classList.remove('show');
+    pendingDeleteId = null;
+  });
+  document.getElementById('confirmDelete').addEventListener('click', async () => {
+    const pin = document.getElementById('deletePinInput').value.trim();
+    if(pin !== ADMIN_PIN){
+      showToast('Incorrect PIN');
+      return;
+    }
+    const { error } = await sb.from('repairs').delete().eq('id', pendingDeleteId);
+    document.getElementById('deleteModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); return; }
+    showToast('Repair deleted');
+    pendingDeleteId = null;
+  });
+
   function matchesSearch(r){
     if(!searchQuery) return true;
     const haystack = [r.name, r.contact_number, r.job_number, r.item].join(' ').toLowerCase();
@@ -634,6 +683,7 @@
         } else {
           actionHtml += `<button class="collect-btn" data-id="${r.id}" data-action="collect">Mark Collected</button>`;
         }
+        actionHtml += `<button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button>`;
 
         tr.innerHTML = `
           <td data-label="Branch">${escapeHtml(r.branch)}</td>
@@ -653,6 +703,9 @@
     });
     document.querySelectorAll('.collect-btn').forEach(btn => {
       btn.addEventListener('click', () => openCollectModal(btn.dataset.id));
+    });
+    document.querySelectorAll('#repairsBody .delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
     });
 
     // COLLECTED section
@@ -678,10 +731,18 @@
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
           <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${photoHtml}</td>
+          <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
         `;
         cBody.appendChild(tr);
       });
     }
+    wireCollectedDeleteButtons();
+  }
+
+  function wireCollectedDeleteButtons(){
+    document.querySelectorAll('#collectedBody .delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+    });
   }
 
   function escapeHtml(str){
