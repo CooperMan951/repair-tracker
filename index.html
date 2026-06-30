@@ -80,6 +80,9 @@
     background:var(--black);
     color:var(--white);
   }
+  .branch-toggle.invalid .branch-btn{
+    border-color:var(--red);
+  }
   label{
     display:block;
     font-size:0.8rem;
@@ -443,6 +446,7 @@
     document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     selectedBranch = btn.dataset.branch;
+    document.getElementById('branchToggle').classList.remove('invalid');
   });
 
   document.getElementById('filters').addEventListener('click', (e) => {
@@ -467,7 +471,12 @@
     const jobNumber = document.getElementById('jobNumber').value.trim();
     const item = document.getElementById('item').value.trim();
 
-    if(!selectedBranch){ showToast('Please select a branch'); return; }
+    if(!selectedBranch){
+      showToast('Please select a branch');
+      document.getElementById('branchToggle').classList.add('invalid');
+      return;
+    }
+    document.getElementById('branchToggle').classList.remove('invalid');
     if(!name || !jobNumber || !item){ showToast('Please fill in Name, Job Number and Item'); return; }
 
     const submitBtn = document.getElementById('submitBtn');
