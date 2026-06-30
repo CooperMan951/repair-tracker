@@ -561,6 +561,13 @@
       r.received = true;
       r.received_by = receivedBy;
       r.received_at = new Date().toISOString();
+
+      if(activeFilter === 'Pending'){
+        activeFilter = 'All';
+        document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('#filters .filter-btn[data-filter="All"]').classList.add('active');
+      }
+
       renderTable();
     }
 
