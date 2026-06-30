@@ -212,6 +212,67 @@
     animation-name: onAutoFillStart;
     animation-duration: 0.001s;
   }
+  .login-screen{
+    max-width:380px;
+    margin:60px auto;
+    background:var(--white);
+    border:1px solid var(--gray-border);
+    border-radius:8px;
+    padding:28px 24px;
+  }
+  .login-screen h2{
+    margin-top:0;
+    font-size:1.1rem;
+  }
+  .login-screen p{
+    font-size:0.85rem;
+    color:var(--gray-text);
+  }
+  .login-screen input{
+    width:100%;
+    padding:11px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.95rem;
+    margin-top:6px;
+  }
+  .login-screen button{
+    width:100%;
+    margin-top:14px;
+    padding:12px;
+    background:var(--black);
+    color:var(--white);
+    border:none;
+    border-radius:6px;
+    font-size:0.95rem;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .login-screen .link-btn{
+    background:none;
+    color:var(--gray-text);
+    text-decoration:underline;
+    font-weight:400;
+    margin-top:10px;
+    cursor:pointer;
+    border:none;
+    width:auto;
+    padding:0;
+  }
+  .signout-btn{
+    background:none;
+    border:1px solid #444;
+    color:var(--white);
+    padding:6px 12px;
+    border-radius:5px;
+    font-size:0.75rem;
+    cursor:pointer;
+  }
+  header .right{
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
   .section-toggle{
     display:flex;
     gap:8px;
@@ -316,9 +377,29 @@
 
 <header>
   <h1>ORMS Repair Tracker</h1>
-  <span id="connStatus">connecting…</span>
+  <div class="right">
+    <span id="connStatus"></span>
+    <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
+    <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
+  </div>
 </header>
 
+<div id="loginScreen" class="login-screen">
+  <h2>Sign in</h2>
+  <p>Enter your ORMS email address. We'll send you a one-time code.</p>
+  <label for="loginEmailInput" style="font-size:0.8rem;font-weight:600;color:var(--gray-text);">Email</label>
+  <input type="email" id="loginEmailInput" autocomplete="off" placeholder="you@orms.co.za">
+  <button id="sendCodeBtn">Send Code</button>
+
+  <div id="codeStep" style="display:none;">
+    <label for="loginCodeInput" style="font-size:0.8rem;font-weight:600;color:var(--gray-text);margin-top:14px;display:block;">6-digit code</label>
+    <input type="text" id="loginCodeInput" inputmode="numeric" autocomplete="off" placeholder="123456">
+    <button id="verifyCodeBtn">Sign In</button>
+    <button class="link-btn" id="resendCodeBtn">Didn't get a code? Resend</button>
+  </div>
+</div>
+
+<div id="appContent" style="display:none;">
 <div class="container">
 
   <div class="card">
@@ -403,6 +484,7 @@
   </div>
 
 </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -461,6 +543,83 @@
 
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
 
+  // ---- Auth ----
+  let pendingLoginEmail = null;
+
+  function showLoggedOut(){
+    document.getElementById('loginScreen').style.display = 'block';
+    document.getElementById('appContent').style.display = 'none';
+    document.getElementById('signOutBtn').style.display = 'none';
+    document.getElementById('userEmailLabel').textContent = '';
+  }
+
+  function showLoggedIn(email){
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appContent').style.display = 'block';
+    document.getElementById('signOutBtn').style.display = 'inline-block';
+    document.getElementById('userEmailLabel').textContent = email;
+    startApp();
+  }
+
+  document.getElementById('sendCodeBtn').addEventListener('click', async () => {
+    const email = document.getElementById('loginEmailInput').value.trim().toLowerCase();
+    if(!email){ showToast('Please enter your email'); return; }
+    const btn = document.getElementById('sendCodeBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+    btn.disabled = false;
+    btn.textContent = 'Send Code';
+    if(error){ showToast('Error: ' + error.message); return; }
+    pendingLoginEmail = email;
+    document.getElementById('codeStep').style.display = 'block';
+    showToast('Code sent — check your inbox');
+  });
+
+  document.getElementById('resendCodeBtn').addEventListener('click', () => {
+    document.getElementById('sendCodeBtn').click();
+  });
+
+  document.getElementById('verifyCodeBtn').addEventListener('click', async () => {
+    const code = document.getElementById('loginCodeInput').value.trim();
+    if(!pendingLoginEmail || !code){ showToast('Please enter the code'); return; }
+    const btn = document.getElementById('verifyCodeBtn');
+    btn.disabled = true;
+    btn.textContent = 'Verifying…';
+    const { error } = await sb.auth.verifyOtp({ email: pendingLoginEmail, token: code, type: 'email' });
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+    if(error){ showToast('Incorrect or expired code'); return; }
+    // onAuthStateChange below handles showing the app
+  });
+
+  document.getElementById('signOutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+  });
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if(session && session.user && session.user.email){
+      showLoggedIn(session.user.email);
+    } else {
+      showLoggedOut();
+    }
+  });
+
+  let appStarted = false;
+  function startApp(){
+    if(appStarted) return;
+    appStarted = true;
+    initApp();
+  }
+
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2500);
+  }
+
+  function initApp(){
   // Build the search box dynamically (rather than static HTML) so browser
   // autofill, which scans the page at load time and is known to ignore
   // autocomplete=off for fields it heuristically matches as contact-related,
@@ -521,13 +680,6 @@
     activeFilter = btn.dataset.filter;
     renderTable();
   });
-
-  function showToast(msg){
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(()=>t.classList.remove('show'), 2500);
-  }
 
   document.getElementById('submitBtn').addEventListener('click', async () => {
     const name = document.getElementById('name').value.trim();
@@ -857,6 +1009,7 @@
   for(let i = 1; i <= 20; i++){
     setTimeout(forceClearSearch, i * 150); // poll every 150ms for ~3 seconds
   }
+  } // end initApp
 </script>
 
 </body>
