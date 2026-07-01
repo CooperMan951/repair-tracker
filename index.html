@@ -248,17 +248,6 @@
     font-weight:600;
     cursor:pointer;
   }
-  .login-screen .link-btn{
-    background:none;
-    color:var(--gray-text);
-    text-decoration:underline;
-    font-weight:400;
-    margin-top:10px;
-    cursor:pointer;
-    border:none;
-    width:auto;
-    padding:0;
-  }
   .signout-btn{
     background:none;
     border:1px solid #444;
@@ -595,7 +584,18 @@
     btn.disabled = false;
     btn.textContent = 'Sign In';
     if(error){ showToast('Incorrect email or password'); return; }
-    // onAuthStateChange handles showing the app
+  });
+
+  // Allow pressing Enter in either login field to trigger sign in
+  ['loginEmailInput','loginPasswordInput'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', (e) => {
+      if(e.key === 'Enter') document.getElementById('signInBtn').click();
+    });
+  });
+
+  // Check for an existing session immediately on load (avoids login screen flash for already-logged-in users)
+  sb.auth.getSession().then(({ data: { session } }) => {
+    if(session && session.user) showLoggedIn(session.user.email);
   });
 
   document.getElementById('signOutBtn').addEventListener('click', async () => {
@@ -621,7 +621,7 @@
     const btn = document.getElementById('confirmAddUser');
     btn.disabled = true;
     btn.textContent = 'Adding…';
-    const { data, error } = await sb.rpc('admin_add_user', {
+    const { error } = await sb.rpc('admin_add_user', {
       p_email: email,
       p_password: password,
       p_admin_pin: pin
@@ -674,20 +674,20 @@
 
   // Catch Chrome's autofill the instant it happens (see the CSS keyframe
   // trick above) and immediately wipe it out, no matter when it fires.
-  searchInput.addEventListener('animationstart', (e) => {
+  searchInput.addEventListener('animationstart', async (e) => {
     if(e.animationName === 'onAutoFillStart'){
       searchInput.value = '';
       searchQuery = '';
-      renderTable();
+      await renderTable();
     }
   });
 
-  document.getElementById('searchInput').addEventListener('input', (e) => {
+  document.getElementById('searchInput').addEventListener('input', async (e) => {
     searchQuery = e.target.value.trim().toLowerCase();
-    renderTable();
+    await renderTable();
   });
 
-  document.getElementById('sectionToggle').addEventListener('click', (e) => {
+  document.getElementById('sectionToggle').addEventListener('click', async (e) => {
     const btn = e.target.closest('.filter-btn');
     if(!btn) return;
     document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
@@ -695,7 +695,7 @@
     activeSection = btn.dataset.section;
     document.getElementById('activeSection').style.display = (activeSection === 'pending' || activeSection === 'active') ? 'block' : 'none';
     document.getElementById('collectedSection').style.display = activeSection === 'collected' ? 'block' : 'none';
-    renderTable();
+    await renderTable();
   });
 
   const branchToggle = document.getElementById('branchToggle');
@@ -708,13 +708,13 @@
     document.getElementById('branchToggle').classList.remove('invalid');
   });
 
-  document.getElementById('filters').addEventListener('click', (e) => {
+  document.getElementById('filters').addEventListener('click', async (e) => {
     const btn = e.target.closest('.filter-btn');
     if(!btn) return;
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeFilter = btn.dataset.filter;
-    renderTable();
+    await renderTable();
   });
 
   document.getElementById('submitBtn').addEventListener('click', async () => {
@@ -758,7 +758,7 @@
     document.querySelector('#sectionToggle .filter-btn[data-section="pending"]').classList.add('active');
     document.getElementById('activeSection').style.display = 'block';
     document.getElementById('collectedSection').style.display = 'none';
-    renderTable();
+    await renderTable();
 
     document.getElementById('name').value = '';
     document.getElementById('contact').value = '';
@@ -795,7 +795,7 @@
       r.received = true;
       r.received_by = receivedBy;
       r.received_at = new Date().toISOString();
-      renderTable();
+      await renderTable();
     }
 
     showToast('Marked as received');
@@ -829,7 +829,6 @@
         confirmBtn.textContent = 'Mark Collected';
         return;
       }
-      const { data: urlData } = sb.storage.from('collection-photos').getPublicUrl(path);
       photoUrl = path; // store path only, not public URL — we'll generate signed URLs for display
     }
 
@@ -850,7 +849,7 @@
       r.collected = true;
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
-      renderTable();
+      await renderTable();
     }
 
     showToast('Marked as collected');
@@ -877,7 +876,7 @@
     if(error){ showToast('Error: ' + error.message); return; }
 
     repairs = repairs.filter(x => x.id !== pendingDeleteId);
-    renderTable();
+    await renderTable();
 
     showToast('Repair deleted');
     pendingDeleteId = null;
@@ -1037,7 +1036,7 @@
     if(seq !== loadRequestSeq) return; // a newer request has since started/finished, ignore this stale one
     if(error){ showToast('Load error: ' + error.message); return; }
     repairs = data;
-    renderTable();
+    await renderTable();
   }
 
   sb.channel('repairs-changes')
@@ -1046,7 +1045,16 @@
     })
     .subscribe((status) => {
       const el = document.getElementById('connStatus');
-      if(status === 'SUBSCRIBED'){ el.textContent = 'live'; }
+      if(status === 'SUBSCRIBED'){
+        el.textContent = '● live';
+        el.style.color = '#6fcf8a';
+      } else if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED'){
+        el.textContent = '● offline';
+        el.style.color = '#f0a8a8';
+      } else {
+        el.textContent = '● connecting…';
+        el.style.color = '#bbb';
+      }
     });
 
   loadRepairs();
@@ -1055,12 +1063,12 @@
   // load/tab-restore regardless of the autocomplete attribute. The search
   // box should always start empty, so force-clear it now and shortly after,
   // since browser autofill can happen slightly after our own script runs.
-  function forceClearSearch(){
+  async function forceClearSearch(){
     const input = document.getElementById('searchInput');
     if(input && input.value !== ''){
       input.value = '';
       searchQuery = '';
-      renderTable();
+      await renderTable();
     }
   }
   forceClearSearch();
