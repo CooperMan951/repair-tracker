@@ -268,6 +268,15 @@
     font-size:0.75rem;
     cursor:pointer;
   }
+  .admin-btn{
+    background:none;
+    border:1px solid #444;
+    color:var(--white);
+    padding:6px 12px;
+    border-radius:5px;
+    font-size:0.75rem;
+    cursor:pointer;
+  }
   header .right{
     display:flex;
     align-items:center;
@@ -380,6 +389,7 @@
   <div class="right">
     <span id="connStatus"></span>
     <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
+    <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
     <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
   </div>
 </header>
@@ -521,6 +531,23 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="adminModal">
+  <div class="modal" style="max-width:400px;">
+    <h3>Add New User</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Enter the new user's details and confirm with the admin PIN.</p>
+    <label for="newUserEmail">Email address</label>
+    <input type="email" id="newUserEmail" autocomplete="off" placeholder="user@orms.co.za">
+    <label for="newUserPassword" style="margin-top:10px;display:block;">Temporary password</label>
+    <input type="text" id="newUserPassword" autocomplete="off" placeholder="e.g. Oranges#@!">
+    <label for="adminPinForUser" style="margin-top:10px;display:block;">Admin PIN</label>
+    <input type="password" id="adminPinForUser" inputmode="numeric" autocomplete="off" placeholder="Enter PIN">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelAdmin">Cancel</button>
+      <button class="confirm" id="confirmAddUser">Add User</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
@@ -544,6 +571,7 @@
     document.getElementById('loginScreen').style.display = 'block';
     document.getElementById('appContent').style.display = 'none';
     document.getElementById('signOutBtn').style.display = 'none';
+    document.getElementById('adminBtn').style.display = 'none';
     document.getElementById('userEmailLabel').textContent = '';
   }
 
@@ -551,6 +579,7 @@
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
+    document.getElementById('adminBtn').style.display = 'inline-block';
     document.getElementById('userEmailLabel').textContent = email;
     startApp();
   }
@@ -571,6 +600,37 @@
 
   document.getElementById('signOutBtn').addEventListener('click', async () => {
     await sb.auth.signOut();
+  });
+
+  document.getElementById('adminBtn').addEventListener('click', () => {
+    document.getElementById('newUserEmail').value = '';
+    document.getElementById('newUserPassword').value = '';
+    document.getElementById('adminPinForUser').value = '';
+    document.getElementById('adminModal').classList.add('show');
+  });
+
+  document.getElementById('cancelAdmin').addEventListener('click', () => {
+    document.getElementById('adminModal').classList.remove('show');
+  });
+
+  document.getElementById('confirmAddUser').addEventListener('click', async () => {
+    const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
+    const password = document.getElementById('newUserPassword').value.trim();
+    const pin = document.getElementById('adminPinForUser').value.trim();
+    if(!email || !password || !pin){ showToast('Please fill in all fields'); return; }
+    const btn = document.getElementById('confirmAddUser');
+    btn.disabled = true;
+    btn.textContent = 'Adding…';
+    const { data, error } = await sb.rpc('admin_add_user', {
+      p_email: email,
+      p_password: password,
+      p_admin_pin: pin
+    });
+    btn.disabled = false;
+    btn.textContent = 'Add User';
+    if(error){ showToast('Error: ' + error.message); return; }
+    document.getElementById('adminModal').classList.remove('show');
+    showToast('User added — they can now log in');
   });
 
   sb.auth.onAuthStateChange((event, session) => {
