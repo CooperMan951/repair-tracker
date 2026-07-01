@@ -429,7 +429,8 @@
     <div class="search-wrap" id="searchWrap"></div>
 
     <div class="section-toggle" id="sectionToggle">
-      <div class="filter-btn active" data-section="active">Active</div>
+      <div class="filter-btn active" data-section="pending">Pending</div>
+      <div class="filter-btn" data-section="active">Active</div>
       <div class="filter-btn" data-section="collected">Collected</div>
     </div>
 
@@ -439,7 +440,6 @@
         <div class="filter-btn" data-filter="Cape Town">Cape Town</div>
         <div class="filter-btn" data-filter="Bellville">Bellville</div>
         <div class="filter-btn" data-filter="Somerset">Somerset</div>
-        <div class="filter-btn" data-filter="Pending">Pending only</div>
       </div>
 
       <table id="repairsTable">
@@ -534,7 +534,7 @@
   const ADMIN_PIN = "3537";
   let repairs = [];
   let searchQuery = "";
-  let activeSection = "active";
+  let activeSection = "pending";
 
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
 
@@ -633,7 +633,7 @@
     document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeSection = btn.dataset.section;
-    document.getElementById('activeSection').style.display = activeSection === 'active' ? 'block' : 'none';
+    document.getElementById('activeSection').style.display = (activeSection === 'pending' || activeSection === 'active') ? 'block' : 'none';
     document.getElementById('collectedSection').style.display = activeSection === 'collected' ? 'block' : 'none';
     renderTable();
   });
@@ -727,11 +727,12 @@
       r.received_by = receivedBy;
       r.received_at = new Date().toISOString();
 
-      if(activeFilter === 'Pending'){
-        activeFilter = 'All';
-        document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.remove('active'));
-        document.querySelector('#filters .filter-btn[data-filter="All"]').classList.add('active');
-      }
+      // Move view to Active so the newly-received item is visible
+      activeSection = 'active';
+      document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector('#sectionToggle .filter-btn[data-section="active"]').classList.add('active');
+      document.getElementById('activeSection').style.display = 'block';
+      document.getElementById('collectedSection').style.display = 'none';
 
       renderTable();
     }
@@ -844,11 +845,15 @@
 
     const allRows = repairs.filter(matchesSearch);
 
-    // ACTIVE section (not yet collected)
+    // PENDING / ACTIVE section
     let activeRows = allRows.filter(r => !r.collected);
-    if(activeFilter === 'Pending'){
+    if(activeSection === 'pending'){
       activeRows = activeRows.filter(r => !r.received);
-    } else if(activeFilter !== 'All'){
+    } else if(activeSection === 'active'){
+      activeRows = activeRows.filter(r => r.received);
+    }
+    // apply branch filter on top
+    if(activeFilter !== 'All'){
       activeRows = activeRows.filter(r => r.branch === activeFilter);
     }
 
