@@ -863,7 +863,8 @@
         const overdue = isOverdue(r);
         let statusHtml;
         if(r.received){
-          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')}</span>`;
+          const receivedDate = r.received_at ? new Date(r.received_at).toLocaleString() : '';
+          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>`;
         } else {
           statusHtml = `<span class="badge pending">Pending</span>`;
         }
