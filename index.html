@@ -726,14 +726,6 @@
       r.received = true;
       r.received_by = receivedBy;
       r.received_at = new Date().toISOString();
-
-      // Move view to Active so the newly-received item is visible
-      activeSection = 'active';
-      document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
-      document.querySelector('#sectionToggle .filter-btn[data-section="active"]').classList.add('active');
-      document.getElementById('activeSection').style.display = 'block';
-      document.getElementById('collectedSection').style.display = 'none';
-
       renderTable();
     }
 
