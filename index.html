@@ -386,17 +386,12 @@
 
 <div id="loginScreen" class="login-screen">
   <h2>Sign in</h2>
-  <p>Enter your ORMS email address. We'll send you a one-time code.</p>
+  <p>Enter your email and password to access the repair tracker.</p>
   <label for="loginEmailInput" style="font-size:0.8rem;font-weight:600;color:var(--gray-text);">Email</label>
-  <input type="email" id="loginEmailInput" autocomplete="off" placeholder="you@orms.co.za">
-  <button id="sendCodeBtn">Send Code</button>
-
-  <div id="codeStep" style="display:none;">
-    <label for="loginCodeInput" style="font-size:0.8rem;font-weight:600;color:var(--gray-text);margin-top:14px;display:block;">6-digit code</label>
-    <input type="text" id="loginCodeInput" inputmode="numeric" autocomplete="off" placeholder="123456">
-    <button id="verifyCodeBtn">Sign In</button>
-    <button class="link-btn" id="resendCodeBtn">Didn't get a code? Resend</button>
-  </div>
+  <input type="email" id="loginEmailInput" autocomplete="username" placeholder="you@orms.co.za">
+  <label for="loginPasswordInput" style="font-size:0.8rem;font-weight:600;color:var(--gray-text);margin-top:10px;display:block;">Password</label>
+  <input type="password" id="loginPasswordInput" autocomplete="current-password" placeholder="Password">
+  <button id="signInBtn">Sign In</button>
 </div>
 
 <div id="appContent" style="display:none;">
@@ -544,7 +539,6 @@
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
 
   // ---- Auth ----
-  let pendingLoginEmail = null;
 
   function showLoggedOut(){
     document.getElementById('loginScreen').style.display = 'block';
@@ -561,36 +555,18 @@
     startApp();
   }
 
-  document.getElementById('sendCodeBtn').addEventListener('click', async () => {
+  document.getElementById('signInBtn').addEventListener('click', async () => {
     const email = document.getElementById('loginEmailInput').value.trim().toLowerCase();
-    if(!email){ showToast('Please enter your email'); return; }
-    const btn = document.getElementById('sendCodeBtn');
+    const password = document.getElementById('loginPasswordInput').value;
+    if(!email || !password){ showToast('Please enter your email and password'); return; }
+    const btn = document.getElementById('signInBtn');
     btn.disabled = true;
-    btn.textContent = 'Sending…';
-    const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-    btn.disabled = false;
-    btn.textContent = 'Send Code';
-    if(error){ showToast('Error: ' + error.message); return; }
-    pendingLoginEmail = email;
-    document.getElementById('codeStep').style.display = 'block';
-    showToast('Code sent — check your inbox');
-  });
-
-  document.getElementById('resendCodeBtn').addEventListener('click', () => {
-    document.getElementById('sendCodeBtn').click();
-  });
-
-  document.getElementById('verifyCodeBtn').addEventListener('click', async () => {
-    const code = document.getElementById('loginCodeInput').value.trim();
-    if(!pendingLoginEmail || !code){ showToast('Please enter the code'); return; }
-    const btn = document.getElementById('verifyCodeBtn');
-    btn.disabled = true;
-    btn.textContent = 'Verifying…';
-    const { error } = await sb.auth.verifyOtp({ email: pendingLoginEmail, token: code, type: 'email' });
+    btn.textContent = 'Signing in…';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
     btn.disabled = false;
     btn.textContent = 'Sign In';
-    if(error){ showToast('Incorrect or expired code'); return; }
-    // onAuthStateChange below handles showing the app
+    if(error){ showToast('Incorrect email or password'); return; }
+    // onAuthStateChange handles showing the app
   });
 
   document.getElementById('signOutBtn').addEventListener('click', async () => {
