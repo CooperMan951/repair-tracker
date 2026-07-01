@@ -830,7 +830,7 @@
         return;
       }
       const { data: urlData } = sb.storage.from('collection-photos').getPublicUrl(path);
-      photoUrl = urlData.publicUrl;
+      photoUrl = path; // store path only, not public URL — we'll generate signed URLs for display
     }
 
     const { error } = await sb.from('repairs').update({
@@ -894,7 +894,7 @@
     return (Date.now() - new Date(r.received_at).getTime()) > SIX_MONTHS_MS;
   }
 
-  function renderTable(){
+  async function renderTable(){
     const overdueCount = repairs.filter(isOverdue).length;
     const banner = document.getElementById('overdueBanner');
     if(overdueCount > 0){
@@ -979,12 +979,29 @@
       cEmpty.style.display = 'block';
     } else {
       cEmpty.style.display = 'none';
-      collectedRows.forEach(r => {
+      for(const r of collectedRows){
         const tr = document.createElement('tr');
         const collectedDate = r.collected_at ? new Date(r.collected_at).toLocaleString() : '';
-        const photoHtml = r.collected_photo_url
-          ? `<br><a href="${escapeHtml(r.collected_photo_url)}" target="_blank" rel="noopener"><img src="${escapeHtml(r.collected_photo_url)}" alt="Collection photo" style="width:60px;height:60px;object-fit:cover;border-radius:4px;margin-top:4px;border:1px solid var(--gray-border);"></a>`
-          : '';
+        let photoHtml = '';
+        if(r.collected_photo_url){
+          // Support both old full public URLs (legacy) and new stored paths
+          const isPath = !r.collected_photo_url.startsWith('http');
+          let signedUrl = null;
+          if(isPath){
+            const { data } = await sb.storage.from('collection-photos').createSignedUrl(r.collected_photo_url, 3600);
+            signedUrl = data?.signedUrl;
+          } else {
+            // Legacy: extract path from old public URL and sign it
+            const parts = r.collected_photo_url.split('/collection-photos/');
+            if(parts[1]){
+              const { data } = await sb.storage.from('collection-photos').createSignedUrl(parts[1], 3600);
+              signedUrl = data?.signedUrl;
+            }
+          }
+          if(signedUrl){
+            photoHtml = `<br><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(signedUrl)}" alt="Collection photo" style="width:60px;height:60px;object-fit:cover;border-radius:4px;margin-top:4px;border:1px solid var(--gray-border);"></a>`;
+          }
+        }
         tr.innerHTML = `
           <td data-label="Branch">${escapeHtml(r.branch)}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
@@ -995,7 +1012,7 @@
           <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
         `;
         cBody.appendChild(tr);
-      });
+      }
     }
     wireCollectedDeleteButtons();
   }
