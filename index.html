@@ -735,13 +735,13 @@
     submitBtn.disabled = true;
     submitBtn.textContent = 'Logging…';
 
-    const { error } = await sb.from('repairs').insert({
+    const { data, error } = await sb.from('repairs').insert({
       branch: selectedBranch,
       name: name,
       contact_number: contact,
       job_number: jobNumber,
       item: item
-    });
+    }).select().single();
 
     submitBtn.disabled = false;
     submitBtn.textContent = 'Log Repair';
@@ -750,6 +750,15 @@
       showToast('Error: ' + error.message);
       return;
     }
+
+    // Add to local array and switch to Pending so it's visible immediately
+    repairs.unshift(data);
+    activeSection = 'pending';
+    document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('#sectionToggle .filter-btn[data-section="pending"]').classList.add('active');
+    document.getElementById('activeSection').style.display = 'block';
+    document.getElementById('collectedSection').style.display = 'none';
+    renderTable();
 
     document.getElementById('name').value = '';
     document.getElementById('contact').value = '';
