@@ -396,8 +396,7 @@
 <div id="appContent" style="display:none;">
 <div class="container">
 
-  <div class="card">
-    <h2>Log a Repair</h2>
+  <div class="card" id="logRepairCard">
     <label>To Branch</label>
     <div class="branch-toggle" id="branchToggle">
       <div class="branch-btn" data-branch="Cape Town">Cape Town</div>
@@ -420,7 +419,7 @@
     <button class="submit" id="submitBtn">Log Repair</button>
   </div>
 
-  <div class="card">
+  <div class="card" id="repairsCard">
     <h2>Repairs</h2>
 
     <div class="overdue-banner" id="overdueBanner"></div>
@@ -590,6 +589,14 @@
     // Set default branch filter based on who logged in
     const defaultBranch = USER_BRANCH_MAP[email.toLowerCase()] || 'All';
     activeFilter = defaultBranch;
+
+    // For Bellville and Somerset, show Repairs first and Log a Repair at the bottom
+    if(defaultBranch === 'Bellville' || defaultBranch === 'Somerset'){
+      const container = document.querySelector('.container');
+      const repairsCard = document.getElementById('repairsCard');
+      const logCard = document.getElementById('logRepairCard');
+      container.insertBefore(repairsCard, logCard);
+    }
 
     startApp();
   }
