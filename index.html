@@ -564,12 +564,28 @@
     document.getElementById('userEmailLabel').textContent = '';
   }
 
+  const USER_BRANCH_MAP = {
+    'arno.cooper@orms.co.za':        'Bellville',
+    'rejaad.hendricks@orms.co.za':   'Somerset',
+    'junaid.dollie@orms.co.za':      'Somerset',
+    'david.nash@orms.co.za':         'Somerset',
+    'bronwyn.jefferys@orms.co.za':   'Cape Town',
+    'joane.opperman@orms.co.za':     'Cape Town',
+    'liezel.adams@orms.co.za':       'Cape Town',
+    'clinton.olckers@orms.co.za':    'Cape Town',
+  };
+
   function showLoggedIn(email){
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
     document.getElementById('adminBtn').style.display = 'inline-block';
     document.getElementById('userEmailLabel').textContent = email;
+
+    // Set default branch filter based on who logged in
+    const defaultBranch = USER_BRANCH_MAP[email.toLowerCase()] || 'All';
+    activeFilter = defaultBranch;
+
     startApp();
   }
 
@@ -656,6 +672,12 @@
   }
 
   function initApp(){
+
+  // Sync the branch filter buttons to whichever branch was set on login
+  document.querySelectorAll('#filters .filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === activeFilter);
+  });
+
   // Build the search box dynamically (rather than static HTML) so browser
   // autofill, which scans the page at load time and is known to ignore
   // autocomplete=off for fields it heuristically matches as contact-related,
