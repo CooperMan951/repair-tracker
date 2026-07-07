@@ -810,9 +810,7 @@
     }).eq('id', pendingReceiveId);
 
     document.getElementById('receiveModal').classList.remove('show');
-    if(error){ showToast('Error: ' + error.message); return; }
-
-    const r = repairs.find(x => x.id === pendingReceiveId);
+    if(error){ showToast('Error: ' + error.message); pendingReceiveId = null; return; }
     if(r){
       r.received = true;
       r.received_by = receivedBy;
@@ -830,6 +828,7 @@
   }
   document.getElementById('cancelCollect').addEventListener('click', () => {
     document.getElementById('collectModal').classList.remove('show');
+    document.getElementById('collectPhotoInput').value = '';
     pendingCollectId = null;
   });
   document.getElementById('confirmCollect').addEventListener('click', async () => {
@@ -895,7 +894,7 @@
     }
     const { error } = await sb.from('repairs').delete().eq('id', pendingDeleteId);
     document.getElementById('deleteModal').classList.remove('show');
-    if(error){ showToast('Error: ' + error.message); return; }
+    if(error){ showToast('Error: ' + error.message); pendingDeleteId = null; return; }
 
     repairs = repairs.filter(x => x.id !== pendingDeleteId);
     await renderTable();
