@@ -1074,8 +1074,8 @@
   }
 
   sb.channel('repairs-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => {
-      loadRepairs();
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, async () => {
+      await loadRepairs();
     })
     .subscribe((status) => {
       const el = document.getElementById('connStatus');
