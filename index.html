@@ -443,7 +443,8 @@
       <table id="repairsTable">
         <thead>
           <tr>
-            <th>Branch</th>
+            <th>To Branch</th>
+            <th>Logged By</th>
             <th>Job #</th>
             <th>Item</th>
             <th>Name</th>
@@ -461,7 +462,8 @@
       <table id="collectedTable">
         <thead>
           <tr>
-            <th>Branch</th>
+            <th>To Branch</th>
+            <th>Logged By</th>
             <th>Job #</th>
             <th>Item</th>
             <th>Name</th>
@@ -775,7 +777,8 @@
       name: name,
       contact_number: contact,
       job_number: jobNumber,
-      item: item
+      item: item,
+      logged_by_branch: USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown'
     }).select().single();
 
     submitBtn.disabled = false;
@@ -1000,7 +1003,8 @@
         actionHtml += `<button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button>`;
 
         tr.innerHTML = `
-          <td data-label="Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="To Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
           <td data-label="Item">${escapeHtml(r.item)}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
@@ -1056,7 +1060,8 @@
           }
         }
         tr.innerHTML = `
-          <td data-label="Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="To Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
           <td data-label="Item">${escapeHtml(r.item)}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
