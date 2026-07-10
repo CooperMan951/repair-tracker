@@ -582,7 +582,7 @@
     <div class="stats-section">
       <h4>Brand breakdown</h4>
       <div id="statsBrandBars"></div>
-      <p class="stats-note">Based on matching "Canon", "Nikon", or "Sony" in the item description. Anything without a clear match is grouped as "Other".</p>
+      <p class="stats-note">Based on matching "Canon"/"EOS", "Nikon", or "Sony" in the item description. Anything without a clear match is grouped as "Other".</p>
     </div>
 
     <div class="modal-buttons">
@@ -782,7 +782,7 @@
     const brandCounts = { Canon: 0, Nikon: 0, Sony: 0, Other: 0 };
     repairs.forEach(r => {
       const item = (r.item || '').toLowerCase();
-      if(item.includes('canon')) brandCounts.Canon++;
+      if(item.includes('canon') || item.includes('eos')) brandCounts.Canon++;
       else if(item.includes('nikon')) brandCounts.Nikon++;
       else if(item.includes('sony')) brandCounts.Sony++;
       else brandCounts.Other++;
