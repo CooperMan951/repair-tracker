@@ -723,6 +723,12 @@
   // ---- Stats (admin-only) ----
   const STATS_BRANCHES = ['Cape Town', 'Bellville', 'Somerset'];
 
+  function escapeHtmlForStats(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
   function computeAndRenderStats(){
     // Repairs by route: Logged By (rows) -> To Branch (columns)
     const matrix = {};
@@ -746,12 +752,12 @@
     let grandTotal = 0;
 
     let routeHtml = '<table class="stats-table"><thead><tr><th class="row-label">Logged By ↓ / To Branch →</th>';
-    STATS_BRANCHES.forEach(b => { routeHtml += `<th>${escapeHtml(b)}</th>`; });
+    STATS_BRANCHES.forEach(b => { routeHtml += `<th>${escapeHtmlForStats(b)}</th>`; });
     routeHtml += '<th class="total">Total</th></tr></thead><tbody>';
 
     STATS_BRANCHES.forEach(from => {
       let rowTotal = 0;
-      routeHtml += `<tr><td class="row-label">${escapeHtml(from)}</td>`;
+      routeHtml += `<tr><td class="row-label">${escapeHtmlForStats(from)}</td>`;
       STATS_BRANCHES.forEach(to => {
         const v = matrix[from][to];
         rowTotal += v;
