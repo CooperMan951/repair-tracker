@@ -357,6 +357,21 @@
   }
   .modal-buttons .cancel{ background:var(--gray-bg); border:1px solid var(--gray-border); }
   .modal-buttons .confirm{ background:var(--green); color:white; }
+  .modal.stats-modal{ max-width:640px; max-height:85vh; overflow-y:auto; text-align:left; }
+  .stats-section{ margin-top:20px; }
+  .stats-section:first-of-type{ margin-top:8px; }
+  .stats-section h4{ margin:0 0 10px; font-size:0.95rem; }
+  .stats-table{ width:100%; border-collapse:collapse; font-size:0.85rem; }
+  .stats-table th, .stats-table td{ border:1px solid var(--gray-border); padding:6px 8px; text-align:center; }
+  .stats-table th{ background:var(--gray-bg); font-weight:600; }
+  .stats-table td.row-label, .stats-table th.row-label{ text-align:left; font-weight:600; background:var(--gray-bg); }
+  .stats-table td.total, .stats-table th.total{ font-weight:700; }
+  .brand-bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .brand-bar-label{ width:70px; font-size:0.85rem; font-weight:600; flex-shrink:0; }
+  .brand-bar-track{ flex:1; background:var(--gray-bg); border-radius:4px; height:18px; overflow:hidden; }
+  .brand-bar-fill{ height:100%; background:var(--black); border-radius:4px; }
+  .brand-bar-count{ width:80px; text-align:right; font-size:0.8rem; color:var(--gray-text); flex-shrink:0; }
+  .stats-note{ font-size:0.75rem; color:var(--gray-text); margin-top:6px; }
   @media (max-width:600px){
     table, thead, tbody, th, td, tr{ display:block; }
     thead{ display:none; }
@@ -389,6 +404,7 @@
   <div class="right">
     <span id="connStatus"></span>
     <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
+    <button class="admin-btn" id="statsBtn" style="display:none;">Stats</button>
     <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
     <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
   </div>
@@ -551,6 +567,27 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="statsModal">
+  <div class="modal stats-modal">
+    <h3>Repair Stats</h3>
+
+    <div class="stats-section">
+      <h4>Repairs by route (Logged By → To Branch)</h4>
+      <div id="statsRouteTable"></div>
+    </div>
+
+    <div class="stats-section">
+      <h4>Brand breakdown</h4>
+      <div id="statsBrandBars"></div>
+      <p class="stats-note">Based on matching "Canon"/"EOS", "Nikon", or "Sony" in the item description. Anything without a clear match is grouped as "Other".</p>
+    </div>
+
+    <div class="modal-buttons">
+      <button class="cancel" id="closeStats" style="flex:none;width:100%;">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
@@ -562,6 +599,7 @@
   let pendingCollectId = null;
   let pendingDeleteId = null;
   const ADMIN_PIN = "3537";
+  const ADMIN_EMAILS = ['arno.cooper@orms.co.za', 'bronwyn.jefferys@orms.co.za'];
   let repairs = [];
   let searchQuery = "";
   let activeSection = "pending";
@@ -575,6 +613,7 @@
     document.getElementById('appContent').style.display = 'none';
     document.getElementById('signOutBtn').style.display = 'none';
     document.getElementById('adminBtn').style.display = 'none';
+    document.getElementById('statsBtn').style.display = 'none';
     document.getElementById('userEmailLabel').textContent = '';
   }
 
@@ -600,6 +639,7 @@
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
     document.getElementById('adminBtn').style.display = 'inline-block';
+    document.getElementById('statsBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
     document.getElementById('userEmailLabel').textContent = email;
 
     // Set default branch filter based on who logged in
@@ -675,6 +715,96 @@
     if(error){ showToast('Error: ' + error.message); return; }
     document.getElementById('adminModal').classList.remove('show');
     showToast('User added — they can now log in');
+  });
+
+  // ---- Stats (admin-only) ----
+  const STATS_BRANCHES = ['Cape Town', 'Bellville', 'Somerset'];
+
+  function escapeHtmlForStats(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function computeAndRenderStats(){
+    // Repairs by route: Logged By (rows) -> To Branch (columns)
+    const matrix = {};
+    STATS_BRANCHES.forEach(from => {
+      matrix[from] = {};
+      STATS_BRANCHES.forEach(to => { matrix[from][to] = 0; });
+    });
+    let unmatched = 0;
+    repairs.forEach(r => {
+      const from = r.logged_by_branch;
+      const to = r.branch;
+      if(from && to && matrix[from] && (to in matrix[from])){
+        matrix[from][to]++;
+      } else {
+        unmatched++;
+      }
+    });
+
+    const colTotals = {};
+    STATS_BRANCHES.forEach(b => colTotals[b] = 0);
+    let grandTotal = 0;
+
+    let routeHtml = '<table class="stats-table"><thead><tr><th class="row-label">Logged By ↓ / To Branch →</th>';
+    STATS_BRANCHES.forEach(b => { routeHtml += `<th>${escapeHtmlForStats(b)}</th>`; });
+    routeHtml += '<th class="total">Total</th></tr></thead><tbody>';
+
+    STATS_BRANCHES.forEach(from => {
+      let rowTotal = 0;
+      routeHtml += `<tr><td class="row-label">${escapeHtmlForStats(from)}</td>`;
+      STATS_BRANCHES.forEach(to => {
+        const v = matrix[from][to];
+        rowTotal += v;
+        colTotals[to] += v;
+        routeHtml += `<td>${v}</td>`;
+      });
+      grandTotal += rowTotal;
+      routeHtml += `<td class="total">${rowTotal}</td></tr>`;
+    });
+
+    routeHtml += '<tr><td class="row-label total">Total</td>';
+    STATS_BRANCHES.forEach(b => { routeHtml += `<td class="total">${colTotals[b]}</td>`; });
+    routeHtml += `<td class="total">${grandTotal}</td></tr>`;
+    routeHtml += '</tbody></table>';
+
+    if(unmatched > 0){
+      routeHtml += `<p class="stats-note">${unmatched} repair${unmatched === 1 ? '' : 's'} ${unmatched === 1 ? 'has' : 'have'} a missing or unrecognized branch and ${unmatched === 1 ? 'is' : 'are'} excluded from this table.</p>`;
+    }
+    document.getElementById('statsRouteTable').innerHTML = routeHtml;
+
+    // Brand breakdown — simple keyword match against the free-text item field
+    const brandCounts = { Canon: 0, Nikon: 0, Sony: 0, Other: 0 };
+    repairs.forEach(r => {
+      const item = (r.item || '').toLowerCase();
+      if(item.includes('canon') || item.includes('eos')) brandCounts.Canon++;
+      else if(item.includes('nikon')) brandCounts.Nikon++;
+      else if(item.includes('sony')) brandCounts.Sony++;
+      else brandCounts.Other++;
+    });
+    const totalItems = repairs.length || 1;
+    let brandHtml = '';
+    ['Canon', 'Nikon', 'Sony', 'Other'].forEach(brand => {
+      const count = brandCounts[brand];
+      const pct = Math.round((count / totalItems) * 100);
+      brandHtml += `
+        <div class="brand-bar-row">
+          <div class="brand-bar-label">${brand}</div>
+          <div class="brand-bar-track"><div class="brand-bar-fill" style="width:${pct}%;"></div></div>
+          <div class="brand-bar-count">${count} (${pct}%)</div>
+        </div>`;
+    });
+    document.getElementById('statsBrandBars').innerHTML = brandHtml;
+  }
+
+  document.getElementById('statsBtn').addEventListener('click', () => {
+    computeAndRenderStats();
+    document.getElementById('statsModal').classList.add('show');
+  });
+  document.getElementById('closeStats').addEventListener('click', () => {
+    document.getElementById('statsModal').classList.remove('show');
   });
 
   sb.auth.onAuthStateChange((event, session) => {
