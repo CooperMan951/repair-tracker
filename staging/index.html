@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORMS Repair Tracker</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --black:#111111;
+    --white:#ffffff;
+    --gray-bg:#f4f4f4;
+    --gray-border:#dcdcdc;
+    --gray-text:#555;
+    --yellow:#ffe14d;
+    --green:#1d8a3f;
+    --red:#c0392b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI', Arial, sans-serif;
+    background:var(--gray-bg);
+    color:var(--black);
+  }
+  header{
+    background:var(--black);
+    color:var(--white);
+    padding:18px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  header h1{
+    margin:0;
+    font-size:1.3rem;
+    letter-spacing:0.5px;
+  }
+  header span{
+    font-size:0.75rem;
+    color:#bbb;
+  }
+  .container{
+    max-width:900px;
+    margin:0 auto;
+    padding:20px;
+  }
+  .card{
+    background:var(--white);
+    border:1px solid var(--gray-border);
+    border-radius:8px;
+    padding:20px;
+    margin-bottom:24px;
+  }
+  .card h2{
+    margin-top:0;
+    font-size:1.05rem;
+    border-bottom:2px solid var(--black);
+    padding-bottom:8px;
+  }
+  .branch-toggle{
+    display:flex;
+    gap:10px;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+  }
+  .branch-btn{
+    flex:1;
+    min-width:110px;
+    padding:12px;
+    text-align:center;
+    border:2px solid var(--black);
+    border-radius:6px;
+    cursor:pointer;
+    font-weight:600;
+    background:var(--white);
+    user-select:none;
+  }
+  .branch-btn.selected{
+    background:var(--black);
+    color:var(--white);
+  }
+  .branch-toggle.invalid .branch-btn{
+    border-color:var(--red);
+  }
+  label{
+    display:block;
+    font-size:0.8rem;
+    font-weight:600;
+    margin-top:12px;
+    margin-bottom:4px;
+    color:var(--gray-text);
+  }
+  input[type=text]{
+    width:100%;
+    padding:10px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.95rem;
+  }
+  textarea{
+    width:100%;
+    padding:10px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.95rem;
+    font-family:inherit;
+    resize:vertical;
+    min-height:60px;
+    box-sizing:border-box;
+  }
+  button.submit{
+    margin-top:18px;
+    width:100%;
+    padding:13px;
+    background:var(--black);
+    color:var(--white);
+    border:none;
+    border-radius:6px;
+    font-size:1rem;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button.submit:hover{ background:#333; }
+  .filters{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .filter-btn{
+    padding:8px 14px;
+    border:1px solid var(--black);
+    border-radius:20px;
+    background:var(--white);
+    cursor:pointer;
+    font-size:0.85rem;
+  }
+  .filter-btn.active{
+    background:var(--black);
+    color:var(--white);
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:0.85rem;
+  }
+  th,td{
+    padding:9px 8px;
+    border-bottom:1px solid var(--gray-border);
+    text-align:left;
+    vertical-align:middle;
+  }
+  th{
+    color:var(--gray-text);
+    font-size:0.72rem;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+  }
+  .badge{
+    display:inline-block;
+    padding:3px 9px;
+    border-radius:12px;
+    font-size:0.72rem;
+    font-weight:700;
+  }
+  .badge.pending{ background:var(--yellow); color:#5a4500; }
+  .badge.received{ background:#d7f2dd; color:var(--green); }
+  .badge.collected{ background:#dbe6f7; color:#1d4f8a; }
+  .badge.overdue{ background:#fbe0dc; color:var(--red); margin-left:6px; }
+  .receive-btn{
+    padding:6px 10px;
+    background:var(--green);
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.78rem;
+  }
+  .receive-btn:hover{ background:#176b32; }
+  .collect-btn{
+    padding:6px 10px;
+    background:#1d4f8a;
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.78rem;
+    margin-top:4px;
+  }
+  .collect-btn:hover{ background:#163c69; }
+  .delete-btn{
+    padding:6px 10px;
+    background:var(--red);
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.78rem;
+    margin-top:4px;
+  }
+  .delete-btn:hover{ background:#962e23; }
+  .search-wrap{
+    margin-bottom:14px;
+  }
+  .search-wrap input{
+    width:100%;
+    padding:10px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.9rem;
+  }
+  /* Detection trick: Chrome applies :-webkit-autofill to fields it has
+     autofilled. Attaching a no-op animation to that pseudo-class lets us
+     catch an 'animationstart' JS event the instant autofill happens, so we
+     can immediately clear the field regardless of when Chrome decides to
+     fill it (page load, focus, or otherwise). */
+  @keyframes onAutoFillStart { from {} to {} }
+  input:-webkit-autofill{
+    animation-name: onAutoFillStart;
+    animation-duration: 0.001s;
+  }
+  .login-screen{
+    max-width:380px;
+    margin:60px auto;
+    background:var(--white);
+    border:1px solid var(--gray-border);
+    border-radius:8px;
+    padding:28px 24px;
+  }
+  .login-screen h2{
+    margin-top:0;
+    font-size:1.1rem;
+  }
+  .login-screen p{
+    font-size:0.85rem;
+    color:var(--gray-text);
+  }
+  .login-screen input{
+    width:100%;
+    padding:11px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.95rem;
+    margin-top:6px;
+  }
+  .login-screen button{
+    width:100%;
+    margin-top:14px;
+    padding:12px;
+    background:var(--black);
+    color:var(--white);
+    border:none;
+    border-radius:6px;
+    font-size:0.95rem;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .signout-btn{
+    background:none;
+    border:1px solid #444;
+    color:var(--white);
+    padding:6px 12px;
+    border-radius:5px;
+    font-size:0.75rem;
+    cursor:pointer;
+  }
+  .admin-btn{
+    background:none;
+    border:1px solid #444;
+    color:var(--white);
+    padding:6px 12px;
+    border-radius:5px;
+    font-size:0.75rem;
+    cursor:pointer;
+  }
+  header .right{
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .section-toggle{
+    display:flex;
+    gap:8px;
+    margin-bottom:16px;
+  }
+  .section-toggle .filter-btn{ flex:1; text-align:center; }
+  .overdue-banner{
+    display:none;
+    background:#fbe0dc;
+    color:var(--red);
+    border:1px solid #f0b8af;
+    border-radius:6px;
+    padding:12px 14px;
+    font-size:0.85rem;
+    font-weight:600;
+    margin-bottom:16px;
+  }
+  .overdue-banner.show{ display:block; }
+  .received-info{
+    font-size:0.75rem;
+    color:var(--gray-text);
+  }
+  .empty{
+    text-align:center;
+    padding:30px;
+    color:var(--gray-text);
+  }
+  .toast{
+    position:fixed;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    background:var(--black);
+    color:white;
+    padding:10px 20px;
+    border-radius:6px;
+    font-size:0.85rem;
+    opacity:0;
+    transition:opacity 0.3s;
+    pointer-events:none;
+  }
+  .toast.show{ opacity:1; }
+  .modal-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.5);
+    align-items:center;
+    justify-content:center;
+    z-index:50;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal{
+    background:white;
+    border-radius:8px;
+    padding:24px;
+    width:90%;
+    max-width:340px;
+  }
+  .modal h3{ margin-top:0; }
+  .modal-buttons{
+    display:flex;
+    gap:10px;
+    margin-top:18px;
+  }
+  .modal-buttons button{
+    flex:1;
+    padding:10px;
+    border-radius:6px;
+    border:none;
+    cursor:pointer;
+    font-weight:600;
+  }
+  .modal-buttons .cancel{ background:var(--gray-bg); border:1px solid var(--gray-border); }
+  .modal-buttons .confirm{ background:var(--green); color:white; }
+  @media (max-width:600px){
+    table, thead, tbody, th, td, tr{ display:block; }
+    thead{ display:none; }
+    tr{
+      margin-bottom:12px;
+      border:1px solid var(--gray-border);
+      border-radius:6px;
+      padding:10px;
+    }
+    td{
+      border:none;
+      display:flex;
+      justify-content:space-between;
+      padding:5px 0;
+    }
+    td::before{
+      content:attr(data-label);
+      font-weight:600;
+      color:var(--gray-text);
+      font-size:0.72rem;
+      text-transform:uppercase;
+    }
+  }
+</style>
+</head>
+<body>
+<div style="position:sticky;top:0;z-index:9999;background:#7a1a1a;color:#fff;text-align:center;padding:6px 10px;font-family:sans-serif;font-size:13px;font-weight:600;letter-spacing:0.5px;">
+  ⚠ STAGING — test version, same live database as production. Changes to real data are permanent.
+</div>
+
+<header>
+  <h1>ORMS Repair Tracker</h1>
+  <div class="right">
+    <span id="connStatus"></span>
+    <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
+    <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
+    <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
+  </div>
+</header>
+
+<div id="loginScreen" class="login-screen">
+  <h2>Sign in</h2>
+  <p>Enter your email and password to access the repair tracker.</p>
+  <label for="loginEmailInput" style="font-size:0.8rem;font-weight:600;color:var(--gray-text);">Email</label>
+  <input type="email" id="loginEmailInput" autocomplete="username" placeholder="you@orms.co.za">
+  <label for="loginPasswordInput" style="font-size:0.8rem;font-weight:600;color:var(--gray-text);margin-top:10px;display:block;">Password</label>
+  <input type="password" id="loginPasswordInput" autocomplete="current-password" placeholder="Password">
+  <button id="signInBtn">Sign In</button>
+</div>
+
+<div id="appContent" style="display:none;">
+<div class="container">
+
+  <div class="card" id="logRepairCard">
+    <label>To Branch</label>
+    <div class="branch-toggle" id="branchToggle">
+      <div class="branch-btn" data-branch="Cape Town">Cape Town</div>
+      <div class="branch-btn" data-branch="Bellville">Bellville</div>
+      <div class="branch-btn" data-branch="Somerset">Somerset</div>
+    </div>
+
+    <label for="name">Name</label>
+    <input type="text" id="name" autocomplete="off" placeholder="Client name">
+
+    <label for="contact">Contact Number</label>
+    <input type="text" id="contact" autocomplete="off" placeholder="e.g. 021 469 1962">
+
+    <label for="jobNumber">Job Number</label>
+    <input type="text" id="jobNumber" autocomplete="off" placeholder="e.g. O10S009119">
+
+    <label for="item">Item</label>
+    <input type="text" id="item" autocomplete="off" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
+
+    <button class="submit" id="submitBtn">Log Repair</button>
+  </div>
+
+  <div class="card" id="repairsCard">
+    <h2>Repairs</h2>
+
+    <div class="overdue-banner" id="overdueBanner"></div>
+
+    <div class="search-wrap" id="searchWrap"></div>
+
+    <div class="section-toggle" id="sectionToggle">
+      <div class="filter-btn active" data-section="pending">Pending</div>
+      <div class="filter-btn" data-section="active">Active</div>
+      <div class="filter-btn" data-section="collected">Collected</div>
+    </div>
+
+    <div id="activeSection">
+      <div class="filters" id="filters">
+        <div class="filter-btn active" data-filter="All">All</div>
+        <div class="filter-btn" data-filter="Cape Town">Cape Town</div>
+        <div class="filter-btn" data-filter="Bellville">Bellville</div>
+        <div class="filter-btn" data-filter="Somerset">Somerset</div>
+      </div>
+
+      <table id="repairsTable">
+        <thead>
+          <tr>
+            <th>To Branch</th>
+            <th>Logged By</th>
+            <th>Job #</th>
+            <th>Item</th>
+            <th>Name</th>
+            <th>Contact</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="repairsBody"></tbody>
+      </table>
+      <div class="empty" id="emptyState" style="display:none;">No repairs logged yet.</div>
+    </div>
+
+    <div id="collectedSection" style="display:none;">
+      <table id="collectedTable">
+        <thead>
+          <tr>
+            <th>To Branch</th>
+            <th>Logged By</th>
+            <th>Job #</th>
+            <th>Item</th>
+            <th>Name</th>
+            <th>Contact</th>
+            <th>Collected</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="collectedBody"></tbody>
+      </table>
+      <div class="empty" id="collectedEmptyState" style="display:none;">No collected repairs yet.</div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="receiveModal">
+  <div class="modal">
+    <h3>Confirm Receipt</h3>
+    <label for="receivedByInput">Your name</label>
+    <input type="text" id="receivedByInput" autocomplete="off" placeholder="Who is ticking this off?">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelReceive">Cancel</button>
+      <button class="confirm" id="confirmReceive">Mark Received</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="collectModal">
+  <div class="modal">
+    <h3>Confirm Collection</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
+    <label for="collectPhotoInput">Photo (optional)</label>
+    <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
+    <label for="collectNoteInput">Note (optional)</label>
+    <textarea id="collectNoteInput" placeholder="e.g. Collected by a family member, ID checked"></textarea>
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelCollect">Cancel</button>
+      <button class="confirm" id="confirmCollect">Mark Collected</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3>Delete Repair</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">This permanently removes the record. Admin PIN required.</p>
+    <label for="deletePinInput">Admin PIN</label>
+    <input type="password" id="deletePinInput" inputmode="numeric" autocomplete="off" placeholder="Enter PIN">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelDelete">Cancel</button>
+      <button class="confirm" id="confirmDelete" style="background:var(--red);">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="adminModal">
+  <div class="modal" style="max-width:400px;">
+    <h3>Add New User</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Enter the new user's details and confirm with the admin PIN.</p>
+    <label for="newUserEmail">Email address</label>
+    <input type="email" id="newUserEmail" autocomplete="off" placeholder="user@orms.co.za">
+    <label for="newUserPassword" style="margin-top:10px;display:block;">Temporary password</label>
+    <input type="text" id="newUserPassword" autocomplete="off" placeholder="e.g. Oranges#@!">
+    <label for="adminPinForUser" style="margin-top:10px;display:block;">Admin PIN</label>
+    <input type="password" id="adminPinForUser" inputmode="numeric" autocomplete="off" placeholder="Enter PIN">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelAdmin">Cancel</button>
+      <button class="confirm" id="confirmAddUser">Add User</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let selectedBranch = null;
+  let activeFilter = "All";
+  let pendingReceiveId = null;
+  let pendingCollectId = null;
+  let pendingDeleteId = null;
+  const ADMIN_PIN = "3537";
+  let repairs = [];
+  let searchQuery = "";
+  let activeSection = "pending";
+
+  const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
+
+  // ---- Auth ----
+
+  function showLoggedOut(){
+    document.getElementById('loginScreen').style.display = 'block';
+    document.getElementById('appContent').style.display = 'none';
+    document.getElementById('signOutBtn').style.display = 'none';
+    document.getElementById('adminBtn').style.display = 'none';
+    document.getElementById('userEmailLabel').textContent = '';
+  }
+
+  const USER_BRANCH_MAP = {
+    'arno.cooper@orms.co.za':        'Bellville',
+    'japie.deklerk@orms.co.za':      'Bellville',
+    'faizel.lakay@orms.co.za':       'Bellville',
+    'brendan.magaar@orms.co.za':     'Bellville',
+    'marcel.yslie@orms.co.za':       'Bellville',
+    'gavin.birkholtz@orms.co.za':    'Bellville',
+    'phiwe.budaza@orms.co.za':       'Bellville',
+    'rejaad.hendricks@orms.co.za':   'Somerset',
+    'junaid.dollie@orms.co.za':      'Somerset',
+    'david.nash@orms.co.za':         'Somerset',
+    'bronwyn.jefferys@orms.co.za':   'Cape Town',
+    'joane.opperman@orms.co.za':     'Cape Town',
+    'liezel.adams@orms.co.za':       'Cape Town',
+    'clinton.olckers@orms.co.za':    'Cape Town',
+  };
+
+  function showLoggedIn(email){
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appContent').style.display = 'block';
+    document.getElementById('signOutBtn').style.display = 'inline-block';
+    document.getElementById('adminBtn').style.display = 'inline-block';
+    document.getElementById('userEmailLabel').textContent = email;
+
+    // Set default branch filter based on who logged in
+    const defaultBranch = USER_BRANCH_MAP[email.toLowerCase()] || 'All';
+    activeFilter = defaultBranch;
+
+    // For Bellville and Somerset, show Repairs first and Log a Repair at the bottom
+    if(defaultBranch === 'Bellville' || defaultBranch === 'Somerset'){
+      const container = document.querySelector('.container');
+      const repairsCard = document.getElementById('repairsCard');
+      const logCard = document.getElementById('logRepairCard');
+      container.insertBefore(repairsCard, logCard);
+    }
+
+    startApp();
+  }
+
+  document.getElementById('signInBtn').addEventListener('click', async () => {
+    const email = document.getElementById('loginEmailInput').value.trim().toLowerCase();
+    const password = document.getElementById('loginPasswordInput').value;
+    if(!email || !password){ showToast('Please enter your email and password'); return; }
+    const btn = document.getElementById('signInBtn');
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+    if(error){ showToast('Incorrect email or password'); return; }
+  });
+
+  // Allow pressing Enter in either login field to trigger sign in
+  ['loginEmailInput','loginPasswordInput'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', (e) => {
+      if(e.key === 'Enter') document.getElementById('signInBtn').click();
+    });
+  });
+
+  // Check for an existing session immediately on load (avoids login screen flash for already-logged-in users)
+  sb.auth.getSession().then(({ data: { session } }) => {
+    if(session && session.user) showLoggedIn(session.user.email);
+  });
+
+  document.getElementById('signOutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+  });
+
+  document.getElementById('adminBtn').addEventListener('click', () => {
+    document.getElementById('newUserEmail').value = '';
+    document.getElementById('newUserPassword').value = '';
+    document.getElementById('adminPinForUser').value = '';
+    document.getElementById('adminModal').classList.add('show');
+  });
+
+  document.getElementById('cancelAdmin').addEventListener('click', () => {
+    document.getElementById('adminModal').classList.remove('show');
+  });
+
+  document.getElementById('confirmAddUser').addEventListener('click', async () => {
+    const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
+    const password = document.getElementById('newUserPassword').value.trim();
+    const pin = document.getElementById('adminPinForUser').value.trim();
+    if(!email || !password || !pin){ showToast('Please fill in all fields'); return; }
+    const btn = document.getElementById('confirmAddUser');
+    btn.disabled = true;
+    btn.textContent = 'Adding…';
+    const { error } = await sb.rpc('admin_add_user', {
+      p_email: email,
+      p_password: password,
+      p_admin_pin: pin
+    });
+    btn.disabled = false;
+    btn.textContent = 'Add User';
+    if(error){ showToast('Error: ' + error.message); return; }
+    document.getElementById('adminModal').classList.remove('show');
+    showToast('User added — they can now log in');
+  });
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if(session && session.user && session.user.email){
+      showLoggedIn(session.user.email);
+    } else {
+      showLoggedOut();
+    }
+  });
+
+  let appStarted = false;
+  function startApp(){
+    if(appStarted) return;
+    appStarted = true;
+    initApp();
+  }
+
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2500);
+  }
+
+  function initApp(){
+
+  // Sync the branch filter buttons to whichever branch was set on login
+  document.querySelectorAll('#filters .filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === activeFilter);
+  });
+
+  // Build the search box dynamically (rather than static HTML) so browser
+  // autofill, which scans the page at load time and is known to ignore
+  // autocomplete=off for fields it heuristically matches as contact-related,
+  // does not get a chance to latch onto it. Also avoid trigger words like
+  // "name" / "contact" in the placeholder.
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.id = 'searchInput';
+  searchInput.name = 'qf-x83k2';
+  searchInput.autocomplete = 'off';
+  searchInput.setAttribute('data-lpignore', 'true');
+  searchInput.setAttribute('data-1p-ignore', 'true');
+  searchInput.setAttribute('data-form-type', 'other');
+  searchInput.placeholder = 'Search repairs…';
+  document.getElementById('searchWrap').appendChild(searchInput);
+
+  // Catch Chrome's autofill the instant it happens (see the CSS keyframe
+  // trick above) and immediately wipe it out, no matter when it fires.
+  searchInput.addEventListener('animationstart', async (e) => {
+    if(e.animationName === 'onAutoFillStart'){
+      searchInput.value = '';
+      searchQuery = '';
+      await renderTable();
+    }
+  });
+
+  document.getElementById('searchInput').addEventListener('input', async (e) => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    await renderTable();
+  });
+
+  document.getElementById('sectionToggle').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeSection = btn.dataset.section;
+    document.getElementById('activeSection').style.display = (activeSection === 'pending' || activeSection === 'active') ? 'block' : 'none';
+    document.getElementById('collectedSection').style.display = activeSection === 'collected' ? 'block' : 'none';
+    await renderTable();
+  });
+
+  const branchToggle = document.getElementById('branchToggle');
+  branchToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.branch-btn');
+    if(!btn) return;
+    document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedBranch = btn.dataset.branch;
+    document.getElementById('branchToggle').classList.remove('invalid');
+  });
+
+  document.getElementById('filters').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+    await renderTable();
+  });
+
+  document.getElementById('submitBtn').addEventListener('click', async () => {
+    const name = document.getElementById('name').value.trim();
+    const contact = document.getElementById('contact').value.trim();
+    const jobNumber = document.getElementById('jobNumber').value.trim();
+    const item = document.getElementById('item').value.trim();
+
+    if(!selectedBranch){
+      showToast('Please select a branch');
+      document.getElementById('branchToggle').classList.add('invalid');
+      return;
+    }
+    document.getElementById('branchToggle').classList.remove('invalid');
+    if(!name || !jobNumber || !item){ showToast('Please fill in Name, Job Number and Item'); return; }
+
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Logging…';
+
+    const { data, error } = await sb.from('repairs').insert({
+      branch: selectedBranch,
+      name: name,
+      contact_number: contact,
+      job_number: jobNumber,
+      item: item,
+      logged_by_branch: USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown'
+    }).select().single();
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Log Repair';
+
+    if(error){
+      showToast('Error: ' + error.message);
+      return;
+    }
+
+    // Add to local array and switch to Pending so it's visible immediately
+    repairs.unshift(data);
+    activeSection = 'pending';
+    document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('#sectionToggle .filter-btn[data-section="pending"]').classList.add('active');
+    document.getElementById('activeSection').style.display = 'block';
+    document.getElementById('collectedSection').style.display = 'none';
+    await renderTable();
+
+    document.getElementById('name').value = '';
+    document.getElementById('contact').value = '';
+    document.getElementById('jobNumber').value = '';
+    document.getElementById('item').value = '';
+    document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
+    selectedBranch = null;
+    showToast('Repair logged');
+  });
+
+  function openReceiveModal(id){
+    pendingReceiveId = id;
+    document.getElementById('receivedByInput').value = '';
+    document.getElementById('receiveModal').classList.add('show');
+  }
+  document.getElementById('cancelReceive').addEventListener('click', () => {
+    document.getElementById('receiveModal').classList.remove('show');
+    pendingReceiveId = null;
+  });
+  document.getElementById('confirmReceive').addEventListener('click', async () => {
+    const receivedBy = document.getElementById('receivedByInput').value.trim();
+    if(!receivedBy){ showToast('Please enter your name'); return; }
+    const { error } = await sb.from('repairs').update({
+      received: true,
+      received_by: receivedBy,
+      received_at: new Date().toISOString()
+    }).eq('id', pendingReceiveId);
+
+    document.getElementById('receiveModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); pendingReceiveId = null; return; }
+    if(r){
+      r.received = true;
+      r.received_by = receivedBy;
+      r.received_at = new Date().toISOString();
+      await renderTable();
+    }
+
+    showToast('Marked as received');
+    pendingReceiveId = null;
+  });
+
+  function openCollectModal(id){
+    pendingCollectId = id;
+    document.getElementById('collectNoteInput').value = '';
+    document.getElementById('collectPhotoInput').value = '';
+    document.getElementById('collectModal').classList.add('show');
+  }
+  document.getElementById('cancelCollect').addEventListener('click', () => {
+    document.getElementById('collectModal').classList.remove('show');
+    document.getElementById('collectPhotoInput').value = '';
+    document.getElementById('collectNoteInput').value = '';
+    pendingCollectId = null;
+  });
+  document.getElementById('confirmCollect').addEventListener('click', async () => {
+    const confirmBtn = document.getElementById('confirmCollect');
+    const fileInput = document.getElementById('collectPhotoInput');
+    const noteInput = document.getElementById('collectNoteInput');
+    const file = fileInput.files[0];
+    const note = noteInput.value.trim() || null;
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = file ? 'Uploading…' : 'Saving…';
+
+    let photoUrl = null;
+    if(file){
+      const ext = file.name.split('.').pop();
+      const path = `${pendingCollectId}-${Date.now()}.${ext}`;
+      const { error: uploadError } = await sb.storage.from('collection-photos').upload(path, file);
+      if(uploadError){
+        showToast('Photo upload failed: ' + uploadError.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Mark Collected';
+        return;
+      }
+      photoUrl = path; // store path only, not public URL — we'll generate signed URLs for display
+    }
+
+    const { error } = await sb.from('repairs').update({
+      collected: true,
+      collected_at: new Date().toISOString(),
+      collected_photo_url: photoUrl,
+      collected_note: note
+    }).eq('id', pendingCollectId);
+
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Mark Collected';
+    fileInput.value = '';
+    noteInput.value = '';
+    document.getElementById('collectModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); return; }
+
+    const r = repairs.find(x => x.id === pendingCollectId);
+    if(r){
+      r.collected = true;
+      r.collected_at = new Date().toISOString();
+      r.collected_photo_url = photoUrl;
+      r.collected_note = note;
+      await renderTable();
+    }
+
+    showToast('Marked as collected');
+    pendingCollectId = null;
+  });
+
+  function openDeleteModal(id){
+    pendingDeleteId = id;
+    document.getElementById('deletePinInput').value = '';
+    document.getElementById('deleteModal').classList.add('show');
+  }
+  document.getElementById('cancelDelete').addEventListener('click', () => {
+    document.getElementById('deleteModal').classList.remove('show');
+    pendingDeleteId = null;
+  });
+  document.getElementById('confirmDelete').addEventListener('click', async () => {
+    const pin = document.getElementById('deletePinInput').value.trim();
+    if(pin !== ADMIN_PIN){
+      showToast('Incorrect PIN');
+      return;
+    }
+    const { error } = await sb.from('repairs').delete().eq('id', pendingDeleteId);
+    document.getElementById('deleteModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); pendingDeleteId = null; return; }
+
+    repairs = repairs.filter(x => x.id !== pendingDeleteId);
+    await renderTable();
+
+    showToast('Repair deleted');
+    pendingDeleteId = null;
+  });
+
+  function matchesSearch(r){
+    if(!searchQuery) return true;
+    const haystack = [r.name, r.contact_number, r.job_number, r.item].join(' ').toLowerCase();
+    return haystack.includes(searchQuery);
+  }
+
+  function isOverdue(r){
+    if(!r.received || r.collected || !r.received_at) return false;
+    return (Date.now() - new Date(r.received_at).getTime()) > SIX_MONTHS_MS;
+  }
+
+  let renderInProgress = false;
+  let renderPending = false;
+
+  async function renderTable(){
+    // Prevent concurrent renders — if one is already running, flag it and return.
+    // The running render will kick off another pass when it finishes.
+    if(renderInProgress){
+      renderPending = true;
+      return;
+    }
+    renderInProgress = true;
+    renderPending = false;
+    try {
+      await _doRender();
+    } finally {
+      renderInProgress = false;
+      if(renderPending) await renderTable();
+    }
+  }
+
+  async function _doRender(){
+    const overdueCount = repairs.filter(isOverdue).length;
+    const banner = document.getElementById('overdueBanner');
+    if(overdueCount > 0){
+      banner.textContent = `⚠ ${overdueCount} repair${overdueCount > 1 ? 's have' : ' has'} been received but not collected for over 6 months.`;
+      banner.classList.add('show');
+    } else {
+      banner.classList.remove('show');
+    }
+
+    const allRows = repairs.filter(matchesSearch);
+
+    // PENDING / ACTIVE section
+    let activeRows = allRows.filter(r => !r.collected);
+    if(activeSection === 'pending'){
+      activeRows = activeRows.filter(r => !r.received);
+    } else if(activeSection === 'active'){
+      activeRows = activeRows.filter(r => r.received);
+    }
+    // apply branch filter on top
+    if(activeFilter !== 'All'){
+      activeRows = activeRows.filter(r => r.branch === activeFilter);
+    }
+
+    const body = document.getElementById('repairsBody');
+    const empty = document.getElementById('emptyState');
+    body.innerHTML = '';
+
+    if(activeRows.length === 0){
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+
+      activeRows.forEach(r => {
+        const tr = document.createElement('tr');
+        const overdue = isOverdue(r);
+        let statusHtml;
+        if(r.received){
+          const receivedDate = r.received_at ? new Date(r.received_at).toLocaleString() : '';
+          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>`;
+        } else {
+          statusHtml = `<span class="badge pending">Pending</span>`;
+        }
+
+        let actionHtml = '';
+        if(!r.received){
+          actionHtml += `<button class="receive-btn" data-id="${r.id}" data-action="receive">Mark Received</button>`;
+        } else {
+          actionHtml += `<button class="collect-btn" data-id="${r.id}" data-action="collect">Mark Collected</button>`;
+        }
+        actionHtml += `<button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button>`;
+
+        tr.innerHTML = `
+          <td data-label="To Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
+          <td data-label="Job #">${escapeHtml(r.job_number)}</td>
+          <td data-label="Item">${escapeHtml(r.item)}</td>
+          <td data-label="Name">${escapeHtml(r.name)}</td>
+          <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
+          <td data-label="Status">${statusHtml}</td>
+          <td data-label="">${actionHtml}</td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    document.querySelectorAll('.receive-btn').forEach(btn => {
+      btn.addEventListener('click', () => openReceiveModal(btn.dataset.id));
+    });
+    document.querySelectorAll('.collect-btn').forEach(btn => {
+      btn.addEventListener('click', () => openCollectModal(btn.dataset.id));
+    });
+    document.querySelectorAll('#repairsBody .delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+    });
+
+    // COLLECTED section
+    const collectedRows = allRows.filter(r => r.collected);
+    const cBody = document.getElementById('collectedBody');
+    const cEmpty = document.getElementById('collectedEmptyState');
+    cBody.innerHTML = '';
+
+    if(collectedRows.length === 0){
+      cEmpty.style.display = 'block';
+    } else {
+      cEmpty.style.display = 'none';
+      for(const r of collectedRows){
+        const tr = document.createElement('tr');
+        const collectedDate = r.collected_at ? new Date(r.collected_at).toLocaleString() : '';
+        let photoHtml = '';
+        if(r.collected_photo_url){
+          // Support both old full public URLs (legacy) and new stored paths
+          const isPath = !r.collected_photo_url.startsWith('http');
+          let signedUrl = null;
+          if(isPath){
+            const { data } = await sb.storage.from('collection-photos').createSignedUrl(r.collected_photo_url, 3600);
+            signedUrl = data?.signedUrl;
+          } else {
+            // Legacy: extract path from old public URL and sign it
+            const parts = r.collected_photo_url.split('/collection-photos/');
+            if(parts[1]){
+              const { data } = await sb.storage.from('collection-photos').createSignedUrl(parts[1], 3600);
+              signedUrl = data?.signedUrl;
+            }
+          }
+          if(signedUrl){
+            photoHtml = `<br><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(signedUrl)}" alt="Collection photo" style="width:60px;height:60px;object-fit:cover;border-radius:4px;margin-top:4px;border:1px solid var(--gray-border);"></a>`;
+          }
+        }
+        let noteHtml = '';
+        if(r.collected_note){
+          noteHtml = `<br><span class="received-info" style="font-style:italic;">"${escapeHtml(r.collected_note)}"</span>`;
+        }
+        tr.innerHTML = `
+          <td data-label="To Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
+          <td data-label="Job #">${escapeHtml(r.job_number)}</td>
+          <td data-label="Item">${escapeHtml(r.item)}</td>
+          <td data-label="Name">${escapeHtml(r.name)}</td>
+          <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
+          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${photoHtml}${noteHtml}</td>
+          <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
+        `;
+        cBody.appendChild(tr);
+      }
+    }
+    wireCollectedDeleteButtons();
+  } // end _doRender
+
+  function wireCollectedDeleteButtons(){
+    document.querySelectorAll('#collectedBody .delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+    });
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  let loadRequestSeq = 0;
+
+  async function loadRepairs(){
+    const seq = ++loadRequestSeq;
+    const { data, error } = await sb.from('repairs').select('*').order('created_at', { ascending: false });
+    if(seq !== loadRequestSeq) return; // a newer request has since started/finished, ignore this stale one
+    if(error){ showToast('Load error: ' + error.message); return; }
+    repairs = data;
+    await renderTable();
+  }
+
+  sb.channel('repairs-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, async () => {
+      await loadRepairs();
+    })
+    .subscribe((status) => {
+      const el = document.getElementById('connStatus');
+      if(status === 'SUBSCRIBED'){
+        el.textContent = '● live';
+        el.style.color = '#6fcf8a';
+      } else if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED'){
+        el.textContent = '● offline';
+        el.style.color = '#f0a8a8';
+      } else {
+        el.textContent = '● connecting…';
+        el.style.color = '#bbb';
+      }
+    });
+
+  loadRepairs();
+
+  // Defensive: some browsers restore or autofill form field values on page
+  // load/tab-restore regardless of the autocomplete attribute. The search
+  // box should always start empty, so force-clear it now and shortly after,
+  // since browser autofill can happen slightly after our own script runs.
+  async function forceClearSearch(){
+    const input = document.getElementById('searchInput');
+    if(input && input.value !== ''){
+      input.value = '';
+      searchQuery = '';
+      await renderTable();
+    }
+  }
+  forceClearSearch();
+  window.addEventListener('load', forceClearSearch);
+  window.addEventListener('pageshow', forceClearSearch);
+  for(let i = 1; i <= 20; i++){
+    setTimeout(forceClearSearch, i * 150); // poll every 150ms for ~3 seconds
+  }
+  } // end initApp
+</script>
+
+</body>
+</html>
