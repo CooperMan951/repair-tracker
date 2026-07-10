@@ -101,6 +101,17 @@
     border-radius:5px;
     font-size:0.95rem;
   }
+  textarea{
+    width:100%;
+    padding:10px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.95rem;
+    font-family:inherit;
+    resize:vertical;
+    min-height:60px;
+    box-sizing:border-box;
+  }
   button.submit{
     margin-top:18px;
     width:100%;
@@ -501,6 +512,8 @@
     <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
     <label for="collectPhotoInput">Photo (optional)</label>
     <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
+    <label for="collectNoteInput">Note (optional)</label>
+    <textarea id="collectNoteInput" placeholder="e.g. Collected by a family member, ID checked"></textarea>
     <div class="modal-buttons">
       <button class="cancel" id="cancelCollect">Cancel</button>
       <button class="confirm" id="confirmCollect">Mark Collected</button>
@@ -840,17 +853,22 @@
 
   function openCollectModal(id){
     pendingCollectId = id;
+    document.getElementById('collectNoteInput').value = '';
+    document.getElementById('collectPhotoInput').value = '';
     document.getElementById('collectModal').classList.add('show');
   }
   document.getElementById('cancelCollect').addEventListener('click', () => {
     document.getElementById('collectModal').classList.remove('show');
     document.getElementById('collectPhotoInput').value = '';
+    document.getElementById('collectNoteInput').value = '';
     pendingCollectId = null;
   });
   document.getElementById('confirmCollect').addEventListener('click', async () => {
     const confirmBtn = document.getElementById('confirmCollect');
     const fileInput = document.getElementById('collectPhotoInput');
+    const noteInput = document.getElementById('collectNoteInput');
     const file = fileInput.files[0];
+    const note = noteInput.value.trim() || null;
 
     confirmBtn.disabled = true;
     confirmBtn.textContent = file ? 'Uploading…' : 'Saving…';
@@ -872,12 +890,14 @@
     const { error } = await sb.from('repairs').update({
       collected: true,
       collected_at: new Date().toISOString(),
-      collected_photo_url: photoUrl
+      collected_photo_url: photoUrl,
+      collected_note: note
     }).eq('id', pendingCollectId);
 
     confirmBtn.disabled = false;
     confirmBtn.textContent = 'Mark Collected';
     fileInput.value = '';
+    noteInput.value = '';
     document.getElementById('collectModal').classList.remove('show');
     if(error){ showToast('Error: ' + error.message); return; }
 
@@ -886,6 +906,7 @@
       r.collected = true;
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
+      r.collected_note = note;
       await renderTable();
     }
 
@@ -1059,6 +1080,10 @@
             photoHtml = `<br><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(signedUrl)}" alt="Collection photo" style="width:60px;height:60px;object-fit:cover;border-radius:4px;margin-top:4px;border:1px solid var(--gray-border);"></a>`;
           }
         }
+        let noteHtml = '';
+        if(r.collected_note){
+          noteHtml = `<br><span class="received-info" style="font-style:italic;">"${escapeHtml(r.collected_note)}"</span>`;
+        }
         tr.innerHTML = `
           <td data-label="To Branch">${escapeHtml(r.branch)}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
@@ -1066,7 +1091,7 @@
           <td data-label="Item">${escapeHtml(r.item)}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
-          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${photoHtml}</td>
+          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${photoHtml}${noteHtml}</td>
           <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
         `;
         cBody.appendChild(tr);
