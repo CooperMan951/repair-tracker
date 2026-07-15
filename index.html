@@ -101,17 +101,6 @@
     border-radius:5px;
     font-size:0.95rem;
   }
-  textarea{
-    width:100%;
-    padding:10px;
-    border:1px solid var(--gray-border);
-    border-radius:5px;
-    font-size:0.95rem;
-    font-family:inherit;
-    resize:vertical;
-    min-height:60px;
-    box-sizing:border-box;
-  }
   button.submit{
     margin-top:18px;
     width:100%;
@@ -192,6 +181,20 @@
     margin-top:4px;
   }
   .collect-btn:hover{ background:#163c69; }
+  .redo-btn{
+    padding:3px 7px;
+    background:transparent;
+    color:#8a5b1d;
+    border:1px solid #c9a06a;
+    border-radius:4px;
+    cursor:pointer;
+    font-size:0.68rem;
+    margin-top:4px;
+    display:block;
+  }
+  .redo-btn:hover{ background:#fbe8d3; }
+  .badge.redo{ background:#fbe8d3; color:#8a5b1d; margin-left:6px; }
+  tr.loan-row td{ background:#fffde8 !important; }
   .delete-btn{
     padding:6px 10px;
     background:var(--red);
@@ -357,21 +360,6 @@
   }
   .modal-buttons .cancel{ background:var(--gray-bg); border:1px solid var(--gray-border); }
   .modal-buttons .confirm{ background:var(--green); color:white; }
-  .modal.stats-modal{ max-width:640px; max-height:85vh; overflow-y:auto; text-align:left; }
-  .stats-section{ margin-top:20px; }
-  .stats-section:first-of-type{ margin-top:8px; }
-  .stats-section h4{ margin:0 0 10px; font-size:0.95rem; }
-  .stats-table{ width:100%; border-collapse:collapse; font-size:0.85rem; }
-  .stats-table th, .stats-table td{ border:1px solid var(--gray-border); padding:6px 8px; text-align:center; }
-  .stats-table th{ background:var(--gray-bg); font-weight:600; }
-  .stats-table td.row-label, .stats-table th.row-label{ text-align:left; font-weight:600; background:var(--gray-bg); }
-  .stats-table td.total, .stats-table th.total{ font-weight:700; }
-  .brand-bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-  .brand-bar-label{ width:70px; font-size:0.85rem; font-weight:600; flex-shrink:0; }
-  .brand-bar-track{ flex:1; background:var(--gray-bg); border-radius:4px; height:18px; overflow:hidden; }
-  .brand-bar-fill{ height:100%; background:var(--black); border-radius:4px; }
-  .brand-bar-count{ width:80px; text-align:right; font-size:0.8rem; color:var(--gray-text); flex-shrink:0; }
-  .stats-note{ font-size:0.75rem; color:var(--gray-text); margin-top:6px; }
   @media (max-width:600px){
     table, thead, tbody, th, td, tr{ display:block; }
     thead{ display:none; }
@@ -404,7 +392,6 @@
   <div class="right">
     <span id="connStatus"></span>
     <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
-    <button class="admin-btn" id="statsBtn" style="display:none;">Stats</button>
     <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
     <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
   </div>
@@ -515,6 +502,15 @@
     <h3>Confirm Receipt</h3>
     <label for="receivedByInput">Your name</label>
     <input type="text" id="receivedByInput" autocomplete="off" placeholder="Who is ticking this off?">
+
+    <div id="loanDispositionSection" style="display:none;margin-top:14px;">
+      <label>This loan unit will go:</label>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button type="button" class="branch-btn" id="dispositionSupplier" style="flex:1;padding:10px;font-size:0.85rem;">Back to Supplier</button>
+        <button type="button" class="branch-btn" id="dispositionStore" style="flex:1;padding:10px;font-size:0.85rem;">Back to Store</button>
+      </div>
+    </div>
+
     <div class="modal-buttons">
       <button class="cancel" id="cancelReceive">Cancel</button>
       <button class="confirm" id="confirmReceive">Mark Received</button>
@@ -528,11 +524,52 @@
     <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
     <label for="collectPhotoInput">Photo (optional)</label>
     <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
-    <label for="collectNoteInput">Note (optional)</label>
-    <textarea id="collectNoteInput" placeholder="e.g. Collected by a family member, ID checked"></textarea>
+
+    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="courierCheck" style="width:auto;">
+      <label for="courierCheck" style="margin:0;">Courier delivery?</label>
+    </div>
+
+    <div id="courierFields" style="display:none;">
+      <label for="courierAddress">Courier Address</label>
+      <input type="text" id="courierAddress" autocomplete="off" placeholder="Full delivery address">
+
+      <label for="waybillFile" style="margin-top:10px;">Waybill (photo/PDF)</label>
+      <input type="file" id="waybillFile" accept="image/*,.pdf">
+    </div>
+
+    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="loanReturnCheck" style="width:auto;">
+      <label for="loanReturnCheck" style="margin:0;">Loan unit return?</label>
+    </div>
+
+    <div id="loanReturnFields" style="display:none;">
+      <label for="loanReturnBranch">Return to which branch?</label>
+      <select id="loanReturnBranch" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:5px;font-size:0.9rem;margin-top:4px;">
+        <option value="Cape Town">Cape Town</option>
+        <option value="Bellville">Bellville</option>
+        <option value="Somerset">Somerset</option>
+      </select>
+      <label for="loanReturnItem" style="margin-top:10px;">Loan unit item</label>
+      <input type="text" id="loanReturnItem" autocomplete="off" placeholder="e.g. Canon EOS R6 - Loan Unit">
+    </div>
+
     <div class="modal-buttons">
       <button class="cancel" id="cancelCollect">Cancel</button>
       <button class="confirm" id="confirmCollect">Mark Collected</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="redoModal">
+  <div class="modal">
+    <h3>Return for Redo</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;" id="redoOriginText">This will flag the item as returned to its origin branch for redo.</p>
+    <label for="redoByInput">Your name</label>
+    <input type="text" id="redoByInput" autocomplete="off" placeholder="Who is sending this back?">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelRedo">Cancel</button>
+      <button class="confirm" id="confirmRedo" style="background:#8a5b1d;">Confirm Return</button>
     </div>
   </div>
 </div>
@@ -567,27 +604,6 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="statsModal">
-  <div class="modal stats-modal">
-    <h3>Repair Stats</h3>
-
-    <div class="stats-section">
-      <h4>Repairs by route (Logged By → To Branch)</h4>
-      <div id="statsRouteTable"></div>
-    </div>
-
-    <div class="stats-section">
-      <h4>Brand breakdown</h4>
-      <div id="statsBrandBars"></div>
-      <p class="stats-note">Based on matching "Canon"/"EOS", "Nikon", or "Sony" in the item description. Anything without a clear match is grouped as "Other".</p>
-    </div>
-
-    <div class="modal-buttons">
-      <button class="cancel" id="closeStats" style="flex:none;width:100%;">Close</button>
-    </div>
-  </div>
-</div>
-
 <script>
   const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
@@ -599,7 +615,6 @@
   let pendingCollectId = null;
   let pendingDeleteId = null;
   const ADMIN_PIN = "3537";
-  const ADMIN_EMAILS = ['arno.cooper@orms.co.za', 'bronwyn.jefferys@orms.co.za'];
   let repairs = [];
   let searchQuery = "";
   let activeSection = "pending";
@@ -613,7 +628,6 @@
     document.getElementById('appContent').style.display = 'none';
     document.getElementById('signOutBtn').style.display = 'none';
     document.getElementById('adminBtn').style.display = 'none';
-    document.getElementById('statsBtn').style.display = 'none';
     document.getElementById('userEmailLabel').textContent = '';
   }
 
@@ -639,7 +653,6 @@
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
     document.getElementById('adminBtn').style.display = 'inline-block';
-    document.getElementById('statsBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
     document.getElementById('userEmailLabel').textContent = email;
 
     // Set default branch filter based on who logged in
@@ -715,96 +728,6 @@
     if(error){ showToast('Error: ' + error.message); return; }
     document.getElementById('adminModal').classList.remove('show');
     showToast('User added — they can now log in');
-  });
-
-  // ---- Stats (admin-only) ----
-  const STATS_BRANCHES = ['Cape Town', 'Bellville', 'Somerset'];
-
-  function escapeHtmlForStats(str){
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
-  function computeAndRenderStats(){
-    // Repairs by route: Logged By (rows) -> To Branch (columns)
-    const matrix = {};
-    STATS_BRANCHES.forEach(from => {
-      matrix[from] = {};
-      STATS_BRANCHES.forEach(to => { matrix[from][to] = 0; });
-    });
-    let unmatched = 0;
-    repairs.forEach(r => {
-      const from = r.logged_by_branch;
-      const to = r.branch;
-      if(from && to && matrix[from] && (to in matrix[from])){
-        matrix[from][to]++;
-      } else {
-        unmatched++;
-      }
-    });
-
-    const colTotals = {};
-    STATS_BRANCHES.forEach(b => colTotals[b] = 0);
-    let grandTotal = 0;
-
-    let routeHtml = '<table class="stats-table"><thead><tr><th class="row-label">Logged By ↓ / To Branch →</th>';
-    STATS_BRANCHES.forEach(b => { routeHtml += `<th>${escapeHtmlForStats(b)}</th>`; });
-    routeHtml += '<th class="total">Total</th></tr></thead><tbody>';
-
-    STATS_BRANCHES.forEach(from => {
-      let rowTotal = 0;
-      routeHtml += `<tr><td class="row-label">${escapeHtmlForStats(from)}</td>`;
-      STATS_BRANCHES.forEach(to => {
-        const v = matrix[from][to];
-        rowTotal += v;
-        colTotals[to] += v;
-        routeHtml += `<td>${v}</td>`;
-      });
-      grandTotal += rowTotal;
-      routeHtml += `<td class="total">${rowTotal}</td></tr>`;
-    });
-
-    routeHtml += '<tr><td class="row-label total">Total</td>';
-    STATS_BRANCHES.forEach(b => { routeHtml += `<td class="total">${colTotals[b]}</td>`; });
-    routeHtml += `<td class="total">${grandTotal}</td></tr>`;
-    routeHtml += '</tbody></table>';
-
-    if(unmatched > 0){
-      routeHtml += `<p class="stats-note">${unmatched} repair${unmatched === 1 ? '' : 's'} ${unmatched === 1 ? 'has' : 'have'} a missing or unrecognized branch and ${unmatched === 1 ? 'is' : 'are'} excluded from this table.</p>`;
-    }
-    document.getElementById('statsRouteTable').innerHTML = routeHtml;
-
-    // Brand breakdown — simple keyword match against the free-text item field
-    const brandCounts = { Canon: 0, Nikon: 0, Sony: 0, Other: 0 };
-    repairs.forEach(r => {
-      const item = (r.item || '').toLowerCase();
-      if(item.includes('canon') || item.includes('eos')) brandCounts.Canon++;
-      else if(item.includes('nikon')) brandCounts.Nikon++;
-      else if(item.includes('sony')) brandCounts.Sony++;
-      else brandCounts.Other++;
-    });
-    const totalItems = repairs.length || 1;
-    let brandHtml = '';
-    ['Canon', 'Nikon', 'Sony', 'Other'].forEach(brand => {
-      const count = brandCounts[brand];
-      const pct = Math.round((count / totalItems) * 100);
-      brandHtml += `
-        <div class="brand-bar-row">
-          <div class="brand-bar-label">${brand}</div>
-          <div class="brand-bar-track"><div class="brand-bar-fill" style="width:${pct}%;"></div></div>
-          <div class="brand-bar-count">${count} (${pct}%)</div>
-        </div>`;
-    });
-    document.getElementById('statsBrandBars').innerHTML = brandHtml;
-  }
-
-  document.getElementById('statsBtn').addEventListener('click', () => {
-    computeAndRenderStats();
-    document.getElementById('statsModal').classList.add('show');
-  });
-  document.getElementById('closeStats').addEventListener('click', () => {
-    document.getElementById('statsModal').classList.remove('show');
   });
 
   sb.auth.onAuthStateChange((event, session) => {
@@ -950,58 +873,111 @@
     showToast('Repair logged');
   });
 
+  let pendingDisposition = null;
+
   function openReceiveModal(id){
     pendingReceiveId = id;
+    pendingDisposition = null;
     document.getElementById('receivedByInput').value = '';
+    const r = repairs.find(x => x.id === id);
+    const showDisposition = !!(r && r.is_loan_return);
+    document.getElementById('loanDispositionSection').style.display = showDisposition ? 'block' : 'none';
+    document.getElementById('dispositionSupplier').classList.remove('selected');
+    document.getElementById('dispositionStore').classList.remove('selected');
     document.getElementById('receiveModal').classList.add('show');
   }
+  document.getElementById('dispositionSupplier').addEventListener('click', () => {
+    pendingDisposition = 'supplier';
+    document.getElementById('dispositionSupplier').classList.add('selected');
+    document.getElementById('dispositionStore').classList.remove('selected');
+  });
+  document.getElementById('dispositionStore').addEventListener('click', () => {
+    pendingDisposition = 'store';
+    document.getElementById('dispositionStore').classList.add('selected');
+    document.getElementById('dispositionSupplier').classList.remove('selected');
+  });
   document.getElementById('cancelReceive').addEventListener('click', () => {
     document.getElementById('receiveModal').classList.remove('show');
     pendingReceiveId = null;
+    pendingDisposition = null;
   });
   document.getElementById('confirmReceive').addEventListener('click', async () => {
     const receivedBy = document.getElementById('receivedByInput').value.trim();
     if(!receivedBy){ showToast('Please enter your name'); return; }
-    const { error } = await sb.from('repairs').update({
+
+    const r = repairs.find(x => x.id === pendingReceiveId);
+    const needsDisposition = !!(r && r.is_loan_return);
+    if(needsDisposition && !pendingDisposition){
+      showToast('Please select Back to Supplier or Back to Store');
+      return;
+    }
+
+    const updatePayload = {
       received: true,
       received_by: receivedBy,
       received_at: new Date().toISOString()
-    }).eq('id', pendingReceiveId);
+    };
+    if(needsDisposition){
+      updatePayload.loan_return_disposition = pendingDisposition;
+    }
+
+    const { error } = await sb.from('repairs').update(updatePayload).eq('id', pendingReceiveId);
 
     document.getElementById('receiveModal').classList.remove('show');
-    if(error){ showToast('Error: ' + error.message); pendingReceiveId = null; return; }
+    if(error){ showToast('Error: ' + error.message); pendingReceiveId = null; pendingDisposition = null; return; }
     if(r){
       r.received = true;
       r.received_by = receivedBy;
       r.received_at = new Date().toISOString();
+      if(needsDisposition) r.loan_return_disposition = pendingDisposition;
       await renderTable();
     }
 
     showToast('Marked as received');
     pendingReceiveId = null;
+    pendingDisposition = null;
   });
 
   function openCollectModal(id){
     pendingCollectId = id;
-    document.getElementById('collectNoteInput').value = '';
-    document.getElementById('collectPhotoInput').value = '';
+    document.getElementById('courierCheck').checked = false;
+    document.getElementById('courierFields').style.display = 'none';
+    document.getElementById('courierAddress').value = '';
+    document.getElementById('waybillFile').value = '';
+    document.getElementById('loanReturnCheck').checked = false;
+    document.getElementById('loanReturnFields').style.display = 'none';
+    document.getElementById('loanReturnBranch').value = 'Cape Town';
+    document.getElementById('loanReturnItem').value = '';
     document.getElementById('collectModal').classList.add('show');
   }
+  document.getElementById('courierCheck').addEventListener('change', (e) => {
+    document.getElementById('courierFields').style.display = e.target.checked ? 'block' : 'none';
+  });
+  document.getElementById('loanReturnCheck').addEventListener('change', (e) => {
+    document.getElementById('loanReturnFields').style.display = e.target.checked ? 'block' : 'none';
+  });
   document.getElementById('cancelCollect').addEventListener('click', () => {
     document.getElementById('collectModal').classList.remove('show');
     document.getElementById('collectPhotoInput').value = '';
-    document.getElementById('collectNoteInput').value = '';
+    document.getElementById('waybillFile').value = '';
     pendingCollectId = null;
   });
   document.getElementById('confirmCollect').addEventListener('click', async () => {
     const confirmBtn = document.getElementById('confirmCollect');
     const fileInput = document.getElementById('collectPhotoInput');
-    const noteInput = document.getElementById('collectNoteInput');
     const file = fileInput.files[0];
-    const note = noteInput.value.trim() || null;
+    const isCourier = document.getElementById('courierCheck').checked;
+    const courierAddress = document.getElementById('courierAddress').value.trim();
+    const waybillFile = document.getElementById('waybillFile').files[0];
+    const loanReturn = document.getElementById('loanReturnCheck').checked;
+    const loanReturnBranch = document.getElementById('loanReturnBranch').value;
+    const loanReturnItem = document.getElementById('loanReturnItem').value.trim();
+
+    if(isCourier && !courierAddress){ showToast('Please enter the courier address'); return; }
+    if(loanReturn && !loanReturnItem){ showToast('Please enter the loan unit item'); return; }
 
     confirmBtn.disabled = true;
-    confirmBtn.textContent = file ? 'Uploading…' : 'Saving…';
+    confirmBtn.textContent = (file || waybillFile) ? 'Uploading…' : 'Saving…';
 
     let photoUrl = null;
     if(file){
@@ -1017,31 +993,121 @@
       photoUrl = path; // store path only, not public URL — we'll generate signed URLs for display
     }
 
+    let waybillUrl = null;
+    if(isCourier && waybillFile){
+      const ext = waybillFile.name.split('.').pop();
+      const path = `${pendingCollectId}-waybill-${Date.now()}.${ext}`;
+      const { error: waybillError } = await sb.storage.from('waybills').upload(path, waybillFile);
+      if(waybillError){
+        showToast('Waybill upload failed: ' + waybillError.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Mark Collected';
+        return;
+      }
+      waybillUrl = path;
+    }
+
+    const r = repairs.find(x => x.id === pendingCollectId);
+
     const { error } = await sb.from('repairs').update({
       collected: true,
       collected_at: new Date().toISOString(),
       collected_photo_url: photoUrl,
-      collected_note: note
+      is_courier: isCourier,
+      courier_address: isCourier ? courierAddress : null,
+      waybill_url: waybillUrl,
+      loan_unit_return: loanReturn,
+      loan_return_branch: loanReturn ? loanReturnBranch : null,
+      loan_return_item: loanReturn ? loanReturnItem : null
     }).eq('id', pendingCollectId);
+
+    if(error){
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Mark Collected';
+      showToast('Error: ' + error.message);
+      return;
+    }
+
+    // If a loan unit is being returned, auto-generate a Pending delivery
+    // at the receiving branch so it shows up on their list.
+    if(loanReturn && r){
+      const currentBranch = USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || r.branch;
+      const { data: newRow, error: loanInsertError } = await sb.from('repairs').insert({
+        branch: loanReturnBranch,
+        name: r.name,
+        contact_number: r.contact_number,
+        job_number: r.job_number,
+        item: 'Loan Return - ' + loanReturnItem,
+        logged_by_branch: currentBranch,
+        is_loan_return: true
+      }).select().single();
+      if(loanInsertError){
+        showToast('Loan return item created, but the delivery record failed: ' + loanInsertError.message);
+      } else if(newRow){
+        repairs.unshift(newRow);
+      }
+    }
 
     confirmBtn.disabled = false;
     confirmBtn.textContent = 'Mark Collected';
     fileInput.value = '';
-    noteInput.value = '';
+    document.getElementById('waybillFile').value = '';
     document.getElementById('collectModal').classList.remove('show');
-    if(error){ showToast('Error: ' + error.message); return; }
 
-    const r = repairs.find(x => x.id === pendingCollectId);
     if(r){
       r.collected = true;
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
-      r.collected_note = note;
+      r.is_courier = isCourier;
+      r.courier_address = isCourier ? courierAddress : null;
+      r.waybill_url = waybillUrl;
+      r.loan_unit_return = loanReturn;
+      r.loan_return_branch = loanReturn ? loanReturnBranch : null;
+      r.loan_return_item = loanReturn ? loanReturnItem : null;
       await renderTable();
     }
 
     showToast('Marked as collected');
     pendingCollectId = null;
+  });
+
+  // ---- Redo / Return to Origin ----
+  let pendingRedoId = null;
+  function openRedoModal(id){
+    pendingRedoId = id;
+    const r = repairs.find(x => x.id === id);
+    const origin = r ? (r.logged_by_branch || 'its origin branch') : 'its origin branch';
+    document.getElementById('redoOriginText').textContent = `This will flag the item as returned to ${origin} for redo.`;
+    document.getElementById('redoByInput').value = '';
+    document.getElementById('redoModal').classList.add('show');
+  }
+  document.getElementById('cancelRedo').addEventListener('click', () => {
+    document.getElementById('redoModal').classList.remove('show');
+    pendingRedoId = null;
+  });
+  document.getElementById('confirmRedo').addEventListener('click', async () => {
+    const redoBy = document.getElementById('redoByInput').value.trim();
+    if(!redoBy){ showToast('Please enter your name'); return; }
+
+    const { error } = await sb.from('repairs').update({
+      is_redo: true,
+      redo_returned_at: new Date().toISOString(),
+      redo_returned_by: redoBy
+    }).eq('id', pendingRedoId);
+
+    document.getElementById('redoModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); pendingRedoId = null; return; }
+
+    const r = repairs.find(x => x.id === pendingRedoId);
+    if(r){
+      r.is_redo = true;
+      r.redo_returned_at = new Date().toISOString();
+      r.redo_returned_by = redoBy;
+      await renderTable();
+    }
+
+    showToast('Marked as returned for redo');
+    pendingRedoId = null;
   });
 
   function openDeleteModal(id){
@@ -1136,11 +1202,12 @@
 
       activeRows.forEach(r => {
         const tr = document.createElement('tr');
+        if(r.is_loan_return) tr.classList.add('loan-row');
         const overdue = isOverdue(r);
         let statusHtml;
         if(r.received){
           const receivedDate = r.received_at ? new Date(r.received_at).toLocaleString() : '';
-          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>`;
+          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}${r.is_loan_return && r.loan_return_disposition ? `<span class="badge redo">${r.loan_return_disposition === 'supplier' ? 'Going back to Supplier' : 'Going back to Store'}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
         } else {
           statusHtml = `<span class="badge pending">Pending</span>`;
         }
@@ -1150,6 +1217,9 @@
           actionHtml += `<button class="receive-btn" data-id="${r.id}" data-action="receive">Mark Received</button>`;
         } else {
           actionHtml += `<button class="collect-btn" data-id="${r.id}" data-action="collect">Mark Collected</button>`;
+          if(!r.is_redo){
+            actionHtml += `<button class="redo-btn" data-id="${r.id}" data-action="redo">Redo — Return to Origin</button>`;
+          }
         }
         actionHtml += `<button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button>`;
 
@@ -1157,7 +1227,7 @@
           <td data-label="To Branch">${escapeHtml(r.branch)}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
-          <td data-label="Item">${escapeHtml(r.item)}</td>
+          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
           <td data-label="Status">${statusHtml}</td>
@@ -1172,6 +1242,9 @@
     });
     document.querySelectorAll('.collect-btn').forEach(btn => {
       btn.addEventListener('click', () => openCollectModal(btn.dataset.id));
+    });
+    document.querySelectorAll('.redo-btn').forEach(btn => {
+      btn.addEventListener('click', () => openRedoModal(btn.dataset.id));
     });
     document.querySelectorAll('#repairsBody .delete-btn').forEach(btn => {
       btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
@@ -1210,18 +1283,14 @@
             photoHtml = `<br><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(signedUrl)}" alt="Collection photo" style="width:60px;height:60px;object-fit:cover;border-radius:4px;margin-top:4px;border:1px solid var(--gray-border);"></a>`;
           }
         }
-        let noteHtml = '';
-        if(r.collected_note){
-          noteHtml = `<br><span class="received-info" style="font-style:italic;">"${escapeHtml(r.collected_note)}"</span>`;
-        }
         tr.innerHTML = `
           <td data-label="To Branch">${escapeHtml(r.branch)}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
-          <td data-label="Item">${escapeHtml(r.item)}</td>
+          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
-          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${photoHtml}${noteHtml}</td>
+          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}</td>
           <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
         `;
         cBody.appendChild(tr);
