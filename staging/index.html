@@ -182,17 +182,19 @@
   }
   .collect-btn:hover{ background:#163c69; }
   .redo-btn{
-    padding:6px 10px;
-    background:#8a5b1d;
-    color:white;
-    border:none;
-    border-radius:5px;
+    padding:3px 7px;
+    background:transparent;
+    color:#8a5b1d;
+    border:1px solid #c9a06a;
+    border-radius:4px;
     cursor:pointer;
-    font-size:0.78rem;
+    font-size:0.68rem;
     margin-top:4px;
+    display:block;
   }
-  .redo-btn:hover{ background:#6b4515; }
+  .redo-btn:hover{ background:#fbe8d3; }
   .badge.redo{ background:#fbe8d3; color:#8a5b1d; margin-left:6px; }
+  tr.loan-row td{ background:#fffde8 !important; }
   .delete-btn{
     padding:6px 10px;
     background:var(--red);
@@ -432,19 +434,6 @@
     <label for="item">Item</label>
     <input type="text" id="item" autocomplete="off" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
 
-    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
-      <input type="checkbox" id="courierCheck" style="width:auto;">
-      <label for="courierCheck" style="margin:0;">Courier delivery?</label>
-    </div>
-
-    <div id="courierFields" style="display:none;">
-      <label for="courierAddress">Courier Address</label>
-      <input type="text" id="courierAddress" autocomplete="off" placeholder="Full delivery address">
-
-      <label for="waybillFile">Waybill (photo/PDF)</label>
-      <input type="file" id="waybillFile" accept="image/*,.pdf">
-    </div>
-
     <button class="submit" id="submitBtn">Log Repair</button>
   </div>
 
@@ -517,6 +506,15 @@
     <h3>Confirm Receipt</h3>
     <label for="receivedByInput">Your name</label>
     <input type="text" id="receivedByInput" autocomplete="off" placeholder="Who is ticking this off?">
+
+    <div id="loanDispositionSection" style="display:none;margin-top:14px;">
+      <label>This loan unit will go:</label>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button type="button" class="branch-btn" id="dispositionSupplier" style="flex:1;padding:10px;font-size:0.85rem;">Back to Supplier</button>
+        <button type="button" class="branch-btn" id="dispositionStore" style="flex:1;padding:10px;font-size:0.85rem;">Back to Store</button>
+      </div>
+    </div>
+
     <div class="modal-buttons">
       <button class="cancel" id="cancelReceive">Cancel</button>
       <button class="confirm" id="confirmReceive">Mark Received</button>
@@ -530,6 +528,19 @@
     <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
     <label for="collectPhotoInput">Photo (optional)</label>
     <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
+
+    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="courierCheck" style="width:auto;">
+      <label for="courierCheck" style="margin:0;">Courier delivery?</label>
+    </div>
+
+    <div id="courierFields" style="display:none;">
+      <label for="courierAddress">Courier Address</label>
+      <input type="text" id="courierAddress" autocomplete="off" placeholder="Full delivery address">
+
+      <label for="waybillFile" style="margin-top:10px;">Waybill (photo/PDF)</label>
+      <input type="file" id="waybillFile" accept="image/*,.pdf">
+    </div>
 
     <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="loanReturnCheck" style="width:auto;">
@@ -813,18 +824,11 @@
     await renderTable();
   });
 
-  document.getElementById('courierCheck').addEventListener('change', (e) => {
-    document.getElementById('courierFields').style.display = e.target.checked ? 'block' : 'none';
-  });
-
   document.getElementById('submitBtn').addEventListener('click', async () => {
     const name = document.getElementById('name').value.trim();
     const contact = document.getElementById('contact').value.trim();
     const jobNumber = document.getElementById('jobNumber').value.trim();
     const item = document.getElementById('item').value.trim();
-    const isCourier = document.getElementById('courierCheck').checked;
-    const courierAddress = document.getElementById('courierAddress').value.trim();
-    const waybillFile = document.getElementById('waybillFile').files[0];
 
     if(!selectedBranch){
       showToast('Please select a branch');
@@ -833,26 +837,9 @@
     }
     document.getElementById('branchToggle').classList.remove('invalid');
     if(!name || !jobNumber || !item){ showToast('Please fill in Name, Job Number and Item'); return; }
-    if(isCourier && !courierAddress){ showToast('Please enter the courier address'); return; }
 
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = true;
-    submitBtn.textContent = waybillFile ? 'Uploading waybill…' : 'Logging…';
-
-    let waybillUrl = null;
-    if(isCourier && waybillFile){
-      const ext = waybillFile.name.split('.').pop();
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: uploadError } = await sb.storage.from('waybills').upload(path, waybillFile);
-      if(uploadError){
-        showToast('Waybill upload failed: ' + uploadError.message);
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Log Repair';
-        return;
-      }
-      waybillUrl = path; // store path only, signed URL generated for display
-    }
-
     submitBtn.textContent = 'Logging…';
 
     const { data, error } = await sb.from('repairs').insert({
@@ -861,10 +848,7 @@
       contact_number: contact,
       job_number: jobNumber,
       item: item,
-      logged_by_branch: USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown',
-      is_courier: isCourier,
-      courier_address: isCourier ? courierAddress : null,
-      waybill_url: waybillUrl
+      logged_by_branch: USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown'
     }).select().single();
 
     submitBtn.disabled = false;
@@ -888,74 +872,116 @@
     document.getElementById('contact').value = '';
     document.getElementById('jobNumber').value = '';
     document.getElementById('item').value = '';
-    document.getElementById('courierCheck').checked = false;
-    document.getElementById('courierAddress').value = '';
-    document.getElementById('waybillFile').value = '';
-    document.getElementById('courierFields').style.display = 'none';
     document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
     selectedBranch = null;
     showToast('Repair logged');
   });
 
+  let pendingDisposition = null;
+
   function openReceiveModal(id){
     pendingReceiveId = id;
+    pendingDisposition = null;
     document.getElementById('receivedByInput').value = '';
+    const r = repairs.find(x => x.id === id);
+    const showDisposition = !!(r && r.is_loan_return);
+    document.getElementById('loanDispositionSection').style.display = showDisposition ? 'block' : 'none';
+    document.getElementById('dispositionSupplier').classList.remove('selected');
+    document.getElementById('dispositionStore').classList.remove('selected');
     document.getElementById('receiveModal').classList.add('show');
   }
+  document.getElementById('dispositionSupplier').addEventListener('click', () => {
+    pendingDisposition = 'supplier';
+    document.getElementById('dispositionSupplier').classList.add('selected');
+    document.getElementById('dispositionStore').classList.remove('selected');
+  });
+  document.getElementById('dispositionStore').addEventListener('click', () => {
+    pendingDisposition = 'store';
+    document.getElementById('dispositionStore').classList.add('selected');
+    document.getElementById('dispositionSupplier').classList.remove('selected');
+  });
   document.getElementById('cancelReceive').addEventListener('click', () => {
     document.getElementById('receiveModal').classList.remove('show');
     pendingReceiveId = null;
+    pendingDisposition = null;
   });
   document.getElementById('confirmReceive').addEventListener('click', async () => {
     const receivedBy = document.getElementById('receivedByInput').value.trim();
     if(!receivedBy){ showToast('Please enter your name'); return; }
-    const { error } = await sb.from('repairs').update({
+
+    const r = repairs.find(x => x.id === pendingReceiveId);
+    const needsDisposition = !!(r && r.is_loan_return);
+    if(needsDisposition && !pendingDisposition){
+      showToast('Please select Back to Supplier or Back to Store');
+      return;
+    }
+
+    const updatePayload = {
       received: true,
       received_by: receivedBy,
       received_at: new Date().toISOString()
-    }).eq('id', pendingReceiveId);
+    };
+    if(needsDisposition){
+      updatePayload.loan_return_disposition = pendingDisposition;
+    }
+
+    const { error } = await sb.from('repairs').update(updatePayload).eq('id', pendingReceiveId);
 
     document.getElementById('receiveModal').classList.remove('show');
-    if(error){ showToast('Error: ' + error.message); pendingReceiveId = null; return; }
+    if(error){ showToast('Error: ' + error.message); pendingReceiveId = null; pendingDisposition = null; return; }
     if(r){
       r.received = true;
       r.received_by = receivedBy;
       r.received_at = new Date().toISOString();
+      if(needsDisposition) r.loan_return_disposition = pendingDisposition;
       await renderTable();
     }
 
     showToast('Marked as received');
     pendingReceiveId = null;
+    pendingDisposition = null;
   });
 
   function openCollectModal(id){
     pendingCollectId = id;
+    document.getElementById('courierCheck').checked = false;
+    document.getElementById('courierFields').style.display = 'none';
+    document.getElementById('courierAddress').value = '';
+    document.getElementById('waybillFile').value = '';
     document.getElementById('loanReturnCheck').checked = false;
     document.getElementById('loanReturnFields').style.display = 'none';
     document.getElementById('loanReturnBranch').value = 'Cape Town';
     document.getElementById('loanReturnItem').value = '';
     document.getElementById('collectModal').classList.add('show');
   }
+  document.getElementById('courierCheck').addEventListener('change', (e) => {
+    document.getElementById('courierFields').style.display = e.target.checked ? 'block' : 'none';
+  });
   document.getElementById('loanReturnCheck').addEventListener('change', (e) => {
     document.getElementById('loanReturnFields').style.display = e.target.checked ? 'block' : 'none';
   });
   document.getElementById('cancelCollect').addEventListener('click', () => {
     document.getElementById('collectModal').classList.remove('show');
     document.getElementById('collectPhotoInput').value = '';
+    document.getElementById('waybillFile').value = '';
     pendingCollectId = null;
   });
   document.getElementById('confirmCollect').addEventListener('click', async () => {
     const confirmBtn = document.getElementById('confirmCollect');
     const fileInput = document.getElementById('collectPhotoInput');
     const file = fileInput.files[0];
+    const isCourier = document.getElementById('courierCheck').checked;
+    const courierAddress = document.getElementById('courierAddress').value.trim();
+    const waybillFile = document.getElementById('waybillFile').files[0];
     const loanReturn = document.getElementById('loanReturnCheck').checked;
     const loanReturnBranch = document.getElementById('loanReturnBranch').value;
     const loanReturnItem = document.getElementById('loanReturnItem').value.trim();
 
+    if(isCourier && !courierAddress){ showToast('Please enter the courier address'); return; }
     if(loanReturn && !loanReturnItem){ showToast('Please enter the loan unit item'); return; }
 
     confirmBtn.disabled = true;
-    confirmBtn.textContent = file ? 'Uploading…' : 'Saving…';
+    confirmBtn.textContent = (file || waybillFile) ? 'Uploading…' : 'Saving…';
 
     let photoUrl = null;
     if(file){
@@ -971,26 +997,74 @@
       photoUrl = path; // store path only, not public URL — we'll generate signed URLs for display
     }
 
+    let waybillUrl = null;
+    if(isCourier && waybillFile){
+      const ext = waybillFile.name.split('.').pop();
+      const path = `${pendingCollectId}-waybill-${Date.now()}.${ext}`;
+      const { error: waybillError } = await sb.storage.from('waybills').upload(path, waybillFile);
+      if(waybillError){
+        showToast('Waybill upload failed: ' + waybillError.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Mark Collected';
+        return;
+      }
+      waybillUrl = path;
+    }
+
+    const r = repairs.find(x => x.id === pendingCollectId);
+
     const { error } = await sb.from('repairs').update({
       collected: true,
       collected_at: new Date().toISOString(),
       collected_photo_url: photoUrl,
+      is_courier: isCourier,
+      courier_address: isCourier ? courierAddress : null,
+      waybill_url: waybillUrl,
       loan_unit_return: loanReturn,
       loan_return_branch: loanReturn ? loanReturnBranch : null,
       loan_return_item: loanReturn ? loanReturnItem : null
     }).eq('id', pendingCollectId);
 
+    if(error){
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Mark Collected';
+      showToast('Error: ' + error.message);
+      return;
+    }
+
+    // If a loan unit is being returned, auto-generate a Pending delivery
+    // at the receiving branch so it shows up on their list.
+    if(loanReturn && r){
+      const currentBranch = USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || r.branch;
+      const { data: newRow, error: loanInsertError } = await sb.from('repairs').insert({
+        branch: loanReturnBranch,
+        name: r.name,
+        contact_number: r.contact_number,
+        job_number: r.job_number,
+        item: 'Loan Return - ' + loanReturnItem,
+        logged_by_branch: currentBranch,
+        is_loan_return: true
+      }).select().single();
+      if(loanInsertError){
+        showToast('Loan return item created, but the delivery record failed: ' + loanInsertError.message);
+      } else if(newRow){
+        repairs.unshift(newRow);
+      }
+    }
+
     confirmBtn.disabled = false;
     confirmBtn.textContent = 'Mark Collected';
     fileInput.value = '';
+    document.getElementById('waybillFile').value = '';
     document.getElementById('collectModal').classList.remove('show');
-    if(error){ showToast('Error: ' + error.message); return; }
 
-    const r = repairs.find(x => x.id === pendingCollectId);
     if(r){
       r.collected = true;
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
+      r.is_courier = isCourier;
+      r.courier_address = isCourier ? courierAddress : null;
+      r.waybill_url = waybillUrl;
       r.loan_unit_return = loanReturn;
       r.loan_return_branch = loanReturn ? loanReturnBranch : null;
       r.loan_return_item = loanReturn ? loanReturnItem : null;
@@ -1132,11 +1206,12 @@
 
       activeRows.forEach(r => {
         const tr = document.createElement('tr');
+        if(r.is_loan_return) tr.classList.add('loan-row');
         const overdue = isOverdue(r);
         let statusHtml;
         if(r.received){
           const receivedDate = r.received_at ? new Date(r.received_at).toLocaleString() : '';
-          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
+          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}${r.is_loan_return && r.loan_return_disposition ? `<span class="badge redo">${r.loan_return_disposition === 'supplier' ? 'Going back to Supplier' : 'Going back to Store'}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
         } else {
           statusHtml = `<span class="badge pending">Pending</span>`;
         }
