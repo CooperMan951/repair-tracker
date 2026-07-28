@@ -1013,7 +1013,24 @@
     return new Promise((resolve) => {
       if(!sigHasContent){ resolve(null); return; }
       const canvas = document.getElementById('signaturePad');
-      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8);
+      // Draw a date/time stamp directly onto the signature image so it's
+      // permanently part of the saved record and can't be separated from it.
+      // We stamp a copy so the on-screen pad isn't visibly altered.
+      const stamped = document.createElement('canvas');
+      stamped.width = canvas.width;
+      stamped.height = canvas.height;
+      const ctx = stamped.getContext('2d');
+      ctx.drawImage(canvas, 0, 0);
+      const stampText = 'Signed: ' + new Date().toLocaleString();
+      ctx.font = '11px Arial';
+      ctx.textBaseline = 'bottom';
+      const textW = ctx.measureText(stampText).width;
+      // Light background strip behind the text for legibility
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillRect(4, stamped.height - 18, textW + 8, 16);
+      ctx.fillStyle = '#555555';
+      ctx.fillText(stampText, 8, stamped.height - 4);
+      stamped.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8);
     });
   }
 
