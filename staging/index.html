@@ -529,6 +529,10 @@
     <label for="collectPhotoInput">Photo (optional)</label>
     <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
 
+    <label style="margin-top:14px;display:block;">Client signature (optional)</label>
+    <canvas id="signaturePad" style="width:100%;height:140px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
+    <button type="button" id="clearSignatureBtn" style="margin-top:6px;padding:5px 12px;font-size:0.78rem;background:transparent;border:1px solid var(--gray-border);border-radius:5px;cursor:pointer;color:var(--gray-text);">Clear signature</button>
+
     <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="courierCheck" style="width:auto;">
       <label for="courierCheck" style="margin:0;">Courier delivery?</label>
@@ -953,7 +957,66 @@
     document.getElementById('loanReturnBranch').value = 'Cape Town';
     document.getElementById('loanReturnItem').value = '';
     document.getElementById('collectModal').classList.add('show');
+    // Set up the signature pad once the modal is visible (canvas needs a
+    // layout size before we can size its drawing surface correctly).
+    setTimeout(initSignaturePad, 50);
   }
+
+  // ---- Signature pad ----
+  let sigCtx = null, sigDrawing = false, sigHasContent = false, sigInitialised = false;
+  function initSignaturePad(){
+    const canvas = document.getElementById('signaturePad');
+    if(!canvas) return;
+    // Size the canvas backing store to its displayed size for crisp lines
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    sigCtx = canvas.getContext('2d');
+    sigCtx.fillStyle = '#ffffff';
+    sigCtx.fillRect(0, 0, canvas.width, canvas.height);
+    sigCtx.strokeStyle = '#111111';
+    sigCtx.lineWidth = 2;
+    sigCtx.lineCap = 'round';
+    sigCtx.lineJoin = 'round';
+    sigHasContent = false;
+
+    if(sigInitialised) return; // only attach listeners once
+    sigInitialised = true;
+
+    function pos(e){
+      const r = canvas.getBoundingClientRect();
+      const point = e.touches ? e.touches[0] : e;
+      return { x: point.clientX - r.left, y: point.clientY - r.top };
+    }
+    function start(e){ e.preventDefault(); sigDrawing = true; const p = pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); }
+    function move(e){ if(!sigDrawing) return; e.preventDefault(); const p = pos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); sigHasContent = true; }
+    function end(e){ sigDrawing = false; }
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mouseleave', end);
+    canvas.addEventListener('touchstart', start, { passive:false });
+    canvas.addEventListener('touchmove', move, { passive:false });
+    canvas.addEventListener('touchend', end);
+  }
+  function clearSignaturePad(){
+    const canvas = document.getElementById('signaturePad');
+    if(!canvas || !sigCtx) return;
+    sigCtx.fillStyle = '#ffffff';
+    sigCtx.fillRect(0, 0, canvas.width, canvas.height);
+    sigHasContent = false;
+  }
+  document.getElementById('clearSignatureBtn').addEventListener('click', clearSignaturePad);
+
+  function getSignatureBlob(){
+    return new Promise((resolve) => {
+      if(!sigHasContent){ resolve(null); return; }
+      const canvas = document.getElementById('signaturePad');
+      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8);
+    });
+  }
+
   document.getElementById('courierCheck').addEventListener('change', (e) => {
     document.getElementById('courierFields').style.display = e.target.checked ? 'block' : 'none';
   });
@@ -964,6 +1027,7 @@
     document.getElementById('collectModal').classList.remove('show');
     document.getElementById('collectPhotoInput').value = '';
     document.getElementById('waybillFile').value = '';
+    clearSignaturePad();
     pendingCollectId = null;
   });
   document.getElementById('confirmCollect').addEventListener('click', async () => {
@@ -1015,12 +1079,28 @@
       waybillUrl = path;
     }
 
+    let signatureUrl = null;
+    const signatureBlob = await getSignatureBlob();
+    if(signatureBlob){
+      confirmBtn.textContent = 'Uploading…';
+      const path = `${pendingCollectId}-signature-${Date.now()}.jpg`;
+      const { error: sigError } = await sb.storage.from('signatures').upload(path, signatureBlob);
+      if(sigError){
+        showToast('Signature upload failed: ' + sigError.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Mark Collected';
+        return;
+      }
+      signatureUrl = path;
+    }
+
     const r = repairs.find(x => x.id === pendingCollectId);
 
     const { error } = await sb.from('repairs').update({
       collected: true,
       collected_at: new Date().toISOString(),
       collected_photo_url: photoUrl,
+      signature_url: signatureUrl,
       is_courier: isCourier,
       courier_address: isCourier ? courierAddress : null,
       waybill_url: waybillUrl,
@@ -1060,12 +1140,14 @@
     confirmBtn.textContent = 'Mark Collected';
     fileInput.value = '';
     document.getElementById('waybillFile').value = '';
+    clearSignaturePad();
     document.getElementById('collectModal').classList.remove('show');
 
     if(r){
       r.collected = true;
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
+      r.signature_url = signatureUrl;
       r.is_courier = isCourier;
       r.courier_address = isCourier ? courierAddress : null;
       r.waybill_url = waybillUrl;
@@ -1278,7 +1360,10 @@
         // Instead we just show a link; the signed URL is only generated and
         // the image only downloaded if someone actually clicks it.
         const photoHtml = r.collected_photo_url
-          ? `<br><a href="#" class="view-photo-link" data-photo-path="${escapeHtml(r.collected_photo_url)}" style="font-size:11.5px;color:var(--accent, #1d4f8a);text-decoration:underline;">📷 Collection note available to view</a>`
+          ? `<br><a href="#" class="view-file-link" data-file-path="${escapeHtml(r.collected_photo_url)}" data-bucket="collection-photos" style="font-size:11.5px;color:var(--accent, #1d4f8a);text-decoration:underline;">📷 Collection note available to view</a>`
+          : '';
+        const sigHtml = r.signature_url
+          ? `<br><a href="#" class="view-file-link" data-file-path="${escapeHtml(r.signature_url)}" data-bucket="signatures" style="font-size:11.5px;color:var(--accent, #1d4f8a);text-decoration:underline;">✍ Signature available to view</a>`
           : '';
         tr.innerHTML = `
           <td data-label="To Branch">${escapeHtml(r.branch)}</td>
@@ -1287,33 +1372,33 @@
           <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
-          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}</td>
+          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}${sigHtml}</td>
           <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
         `;
         cBody.appendChild(tr);
       }
     }
     wireCollectedDeleteButtons();
-    wireViewPhotoLinks();
+    wireViewFileLinks();
   } // end _doRender
 
-  async function openCollectionPhoto(path, linkEl){
+  async function openStorageFile(path, bucket, linkEl){
     const originalText = linkEl.textContent;
     linkEl.textContent = 'Loading…';
     const isPath = !path.startsWith('http');
-    const cacheKey = path;
+    const cacheKey = bucket + ':' + path;
     const cached = signedUrlCache.get(cacheKey);
     let signedUrl = null;
     if(cached && cached.expiresAt > Date.now()){
       signedUrl = cached.url;
     } else if(isPath){
-      const { data } = await sb.storage.from('collection-photos').createSignedUrl(path, 3600);
+      const { data } = await sb.storage.from(bucket).createSignedUrl(path, 3600);
       signedUrl = data?.signedUrl;
     } else {
       // Legacy: extract path from an old full public URL and sign it
-      const parts = path.split('/collection-photos/');
+      const parts = path.split('/' + bucket + '/');
       if(parts[1]){
-        const { data } = await sb.storage.from('collection-photos').createSignedUrl(parts[1], 3600);
+        const { data } = await sb.storage.from(bucket).createSignedUrl(parts[1], 3600);
         signedUrl = data?.signedUrl;
       }
     }
@@ -1321,16 +1406,16 @@
       signedUrlCache.set(cacheKey, { url: signedUrl, expiresAt: Date.now() + 55*60*1000 });
       window.open(signedUrl, '_blank', 'noopener');
     } else {
-      showToast('Could not load the photo — please try again');
+      showToast('Could not load the file — please try again');
     }
     linkEl.textContent = originalText;
   }
 
-  function wireViewPhotoLinks(){
-    document.querySelectorAll('.view-photo-link').forEach(link => {
+  function wireViewFileLinks(){
+    document.querySelectorAll('.view-file-link').forEach(link => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
-        openCollectionPhoto(link.dataset.photoPath, link);
+        openStorageFile(link.dataset.filePath, link.dataset.bucket, link);
       });
     });
   }
