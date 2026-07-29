@@ -477,6 +477,12 @@
     </div>
 
     <div id="collectedSection" style="display:none;">
+      <div class="filters" id="collectedFilters">
+        <div class="filter-btn active" data-cfilter="All">All</div>
+        <div class="filter-btn" data-cfilter="Cape Town">Cape Town</div>
+        <div class="filter-btn" data-cfilter="Bellville">Bellville</div>
+        <div class="filter-btn" data-cfilter="Somerset">Somerset</div>
+      </div>
       <table id="collectedTable">
         <thead>
           <tr>
@@ -493,6 +499,11 @@
         <tbody id="collectedBody"></tbody>
       </table>
       <div class="empty" id="collectedEmptyState" style="display:none;">No collected repairs yet.</div>
+      <div id="collectedPagination" style="display:none;align-items:center;justify-content:center;gap:14px;margin-top:14px;">
+        <button id="collectedPrev" class="filter-btn" style="cursor:pointer;">← Prev</button>
+        <span id="collectedPageInfo" style="font-size:0.85rem;color:var(--gray-text);"></span>
+        <button id="collectedNext" class="filter-btn" style="cursor:pointer;">Next →</button>
+      </div>
     </div>
   </div>
 
@@ -638,6 +649,9 @@
   let repairs = [];
   let searchQuery = "";
   let activeSection = "pending";
+  let collectedFilter = "All";
+  let collectedPage = 1;
+  const COLLECTED_PER_PAGE = 10;
 
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
 
@@ -834,10 +848,27 @@
   document.getElementById('filters').addEventListener('click', async (e) => {
     const btn = e.target.closest('.filter-btn');
     if(!btn) return;
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeFilter = btn.dataset.filter;
     await renderTable();
+  });
+
+  document.getElementById('collectedFilters').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    document.querySelectorAll('#collectedFilters .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    collectedFilter = btn.dataset.cfilter;
+    collectedPage = 1; // reset to first page when switching branch
+    await renderTable();
+  });
+
+  document.getElementById('collectedPrev').addEventListener('click', async () => {
+    if(collectedPage > 1){ collectedPage--; await renderTable(); }
+  });
+  document.getElementById('collectedNext').addEventListener('click', async () => {
+    collectedPage++; await renderTable(); // renderTable clamps to max page
   });
 
   document.getElementById('submitBtn').addEventListener('click', async () => {
@@ -1389,16 +1420,31 @@
     });
 
     // COLLECTED section
-    const collectedRows = allRows.filter(r => r.collected);
+    let collectedRows = allRows.filter(r => r.collected);
+    // Apply branch filter (independent of the active-tab branch filter)
+    if(collectedFilter !== 'All'){
+      collectedRows = collectedRows.filter(r => r.branch === collectedFilter);
+    }
+
     const cBody = document.getElementById('collectedBody');
     const cEmpty = document.getElementById('collectedEmptyState');
+    const cPagination = document.getElementById('collectedPagination');
     cBody.innerHTML = '';
 
     if(collectedRows.length === 0){
       cEmpty.style.display = 'block';
+      cPagination.style.display = 'none';
     } else {
       cEmpty.style.display = 'none';
-      for(const r of collectedRows){
+
+      // Pagination maths
+      const totalPages = Math.max(1, Math.ceil(collectedRows.length / COLLECTED_PER_PAGE));
+      if(collectedPage > totalPages) collectedPage = totalPages;
+      if(collectedPage < 1) collectedPage = 1;
+      const startIdx = (collectedPage - 1) * COLLECTED_PER_PAGE;
+      const pageRows = collectedRows.slice(startIdx, startIdx + COLLECTED_PER_PAGE);
+
+      for(const r of pageRows){
         const tr = document.createElement('tr');
         const collectedDate = r.collected_at ? new Date(r.collected_at).toLocaleString() : '';
         // Photos are never auto-loaded or pre-fetched here — that was the
@@ -1423,6 +1469,19 @@
           <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
         `;
         cBody.appendChild(tr);
+      }
+
+      // Pagination controls
+      if(collectedRows.length > COLLECTED_PER_PAGE){
+        cPagination.style.display = 'flex';
+        document.getElementById('collectedPageInfo').textContent =
+          `Page ${collectedPage} of ${totalPages}  ·  ${collectedRows.length} items`;
+        document.getElementById('collectedPrev').disabled = (collectedPage <= 1);
+        document.getElementById('collectedNext').disabled = (collectedPage >= totalPages);
+        document.getElementById('collectedPrev').style.opacity = (collectedPage <= 1) ? '0.4' : '1';
+        document.getElementById('collectedNext').style.opacity = (collectedPage >= totalPages) ? '0.4' : '1';
+      } else {
+        cPagination.style.display = 'none';
       }
     }
     wireCollectedDeleteButtons();
