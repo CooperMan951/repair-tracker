@@ -473,6 +473,12 @@
     </div>
 
     <div id="collectedSection" style="display:none;">
+      <div class="filters" id="collectedFilters">
+        <div class="filter-btn active" data-cfilter="All">All</div>
+        <div class="filter-btn" data-cfilter="Cape Town">Cape Town</div>
+        <div class="filter-btn" data-cfilter="Bellville">Bellville</div>
+        <div class="filter-btn" data-cfilter="Somerset">Somerset</div>
+      </div>
       <table id="collectedTable">
         <thead>
           <tr>
@@ -489,6 +495,11 @@
         <tbody id="collectedBody"></tbody>
       </table>
       <div class="empty" id="collectedEmptyState" style="display:none;">No collected repairs yet.</div>
+      <div id="collectedPagination" style="display:none;align-items:center;justify-content:center;gap:14px;margin-top:14px;">
+        <button id="collectedPrev" class="filter-btn" style="cursor:pointer;">← Prev</button>
+        <span id="collectedPageInfo" style="font-size:0.85rem;color:var(--gray-text);"></span>
+        <button id="collectedNext" class="filter-btn" style="cursor:pointer;">Next →</button>
+      </div>
     </div>
   </div>
 
@@ -524,6 +535,10 @@
     <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
     <label for="collectPhotoInput">Photo (optional)</label>
     <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
+
+    <label style="margin-top:14px;display:block;">Client signature (optional)</label>
+    <canvas id="signaturePad" style="width:100%;height:140px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
+    <button type="button" id="clearSignatureBtn" style="margin-top:6px;padding:5px 12px;font-size:0.78rem;background:transparent;border:1px solid var(--gray-border);border-radius:5px;cursor:pointer;color:var(--gray-text);">Clear signature</button>
 
     <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="courierCheck" style="width:auto;">
@@ -587,6 +602,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="viewerModal">
+  <div class="modal" style="max-width:520px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <h3 id="viewerTitle" style="margin:0;">Preview</h3>
+      <button class="cancel" id="closeViewer" style="padding:5px 12px;">Close</button>
+    </div>
+    <div id="viewerBody" style="text-align:center;min-height:120px;display:flex;align-items:center;justify-content:center;">
+      <span id="viewerLoading" style="color:var(--gray-text);font-size:0.85rem;">Loading…</span>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="adminModal">
   <div class="modal" style="max-width:400px;">
     <h3>Add New User</h3>
@@ -618,6 +645,9 @@
   let repairs = [];
   let searchQuery = "";
   let activeSection = "pending";
+  let collectedFilter = "All";
+  let collectedPage = 1;
+  const COLLECTED_PER_PAGE = 10;
 
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
 
@@ -814,10 +844,27 @@
   document.getElementById('filters').addEventListener('click', async (e) => {
     const btn = e.target.closest('.filter-btn');
     if(!btn) return;
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeFilter = btn.dataset.filter;
     await renderTable();
+  });
+
+  document.getElementById('collectedFilters').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    document.querySelectorAll('#collectedFilters .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    collectedFilter = btn.dataset.cfilter;
+    collectedPage = 1; // reset to first page when switching branch
+    await renderTable();
+  });
+
+  document.getElementById('collectedPrev').addEventListener('click', async () => {
+    if(collectedPage > 1){ collectedPage--; await renderTable(); }
+  });
+  document.getElementById('collectedNext').addEventListener('click', async () => {
+    collectedPage++; await renderTable(); // renderTable clamps to max page
   });
 
   document.getElementById('submitBtn').addEventListener('click', async () => {
@@ -949,7 +996,97 @@
     document.getElementById('loanReturnBranch').value = 'Cape Town';
     document.getElementById('loanReturnItem').value = '';
     document.getElementById('collectModal').classList.add('show');
+    // Set up the signature pad once the modal is visible (canvas needs a
+    // layout size before we can size its drawing surface correctly).
+    setTimeout(initSignaturePad, 50);
   }
+
+  // ---- Signature pad ----
+  let sigCtx = null, sigDrawing = false, sigHasContent = false, sigInitialised = false;
+  function initSignaturePad(){
+    const canvas = document.getElementById('signaturePad');
+    if(!canvas) return;
+    // Size the canvas backing store to its displayed size for crisp lines
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    sigCtx = canvas.getContext('2d');
+    sigCtx.fillStyle = '#ffffff';
+    sigCtx.fillRect(0, 0, canvas.width, canvas.height);
+    sigCtx.strokeStyle = '#111111';
+    sigCtx.lineWidth = 2;
+    sigCtx.lineCap = 'round';
+    sigCtx.lineJoin = 'round';
+    sigHasContent = false;
+
+    if(sigInitialised) return; // only attach listeners once
+    sigInitialised = true;
+
+    function pos(e){
+      const r = canvas.getBoundingClientRect();
+      const point = e.touches ? e.touches[0] : e;
+      return { x: point.clientX - r.left, y: point.clientY - r.top };
+    }
+    function start(e){ e.preventDefault(); sigDrawing = true; const p = pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); }
+    function move(e){ if(!sigDrawing) return; e.preventDefault(); const p = pos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); sigHasContent = true; }
+    function end(e){ sigDrawing = false; }
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mouseleave', end);
+    canvas.addEventListener('touchstart', start, { passive:false });
+    canvas.addEventListener('touchmove', move, { passive:false });
+    canvas.addEventListener('touchend', end);
+  }
+  function clearSignaturePad(){
+    const canvas = document.getElementById('signaturePad');
+    if(!canvas || !sigCtx) return;
+    sigCtx.fillStyle = '#ffffff';
+    sigCtx.fillRect(0, 0, canvas.width, canvas.height);
+    sigHasContent = false;
+  }
+  document.getElementById('clearSignatureBtn').addEventListener('click', clearSignaturePad);
+
+  function getSignatureBlob(details){
+    return new Promise((resolve) => {
+      if(!sigHasContent){ resolve(null); return; }
+      const canvas = document.getElementById('signaturePad');
+      // Draw a stamp (client name, job number, date/time) directly onto the
+      // signature image so it's permanently part of the saved record and
+      // can't be separated from or mismatched with the job it belongs to.
+      // We stamp a copy so the on-screen pad isn't visibly altered.
+      const stamped = document.createElement('canvas');
+      stamped.width = canvas.width;
+      stamped.height = canvas.height;
+      const ctx = stamped.getContext('2d');
+      ctx.drawImage(canvas, 0, 0);
+
+      const line1 = (details && details.name ? details.name : '') + (details && details.job ? '  ·  Job ' + details.job : '');
+      const line2 = 'Signed: ' + new Date().toLocaleString();
+
+      ctx.font = '11px Arial';
+      ctx.textBaseline = 'bottom';
+      const w1 = line1 ? ctx.measureText(line1).width : 0;
+      const w2 = ctx.measureText(line2).width;
+      const boxW = Math.max(w1, w2) + 8;
+      const boxH = line1 ? 32 : 16;
+      // Light background strip behind the text for legibility
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillRect(4, stamped.height - boxH - 2, boxW, boxH);
+      ctx.fillStyle = '#333333';
+      if(line1){
+        ctx.fillText(line1, 8, stamped.height - 20);
+        ctx.fillStyle = '#555555';
+        ctx.fillText(line2, 8, stamped.height - 4);
+      } else {
+        ctx.fillStyle = '#555555';
+        ctx.fillText(line2, 8, stamped.height - 4);
+      }
+      stamped.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8);
+    });
+  }
+
   document.getElementById('courierCheck').addEventListener('change', (e) => {
     document.getElementById('courierFields').style.display = e.target.checked ? 'block' : 'none';
   });
@@ -960,6 +1097,7 @@
     document.getElementById('collectModal').classList.remove('show');
     document.getElementById('collectPhotoInput').value = '';
     document.getElementById('waybillFile').value = '';
+    clearSignaturePad();
     pendingCollectId = null;
   });
   document.getElementById('confirmCollect').addEventListener('click', async () => {
@@ -977,13 +1115,15 @@
     if(loanReturn && !loanReturnItem){ showToast('Please enter the loan unit item'); return; }
 
     confirmBtn.disabled = true;
-    confirmBtn.textContent = (file || waybillFile) ? 'Uploading…' : 'Saving…';
+    confirmBtn.textContent = (file || waybillFile) ? 'Preparing…' : 'Saving…';
 
     let photoUrl = null;
     if(file){
-      const ext = file.name.split('.').pop();
+      const compressedFile = await compressImage(file);
+      confirmBtn.textContent = 'Uploading…';
+      const ext = compressedFile.name.split('.').pop();
       const path = `${pendingCollectId}-${Date.now()}.${ext}`;
-      const { error: uploadError } = await sb.storage.from('collection-photos').upload(path, file);
+      const { error: uploadError } = await sb.storage.from('collection-photos').upload(path, compressedFile);
       if(uploadError){
         showToast('Photo upload failed: ' + uploadError.message);
         confirmBtn.disabled = false;
@@ -995,9 +1135,11 @@
 
     let waybillUrl = null;
     if(isCourier && waybillFile){
-      const ext = waybillFile.name.split('.').pop();
+      const compressedWaybill = await compressImage(waybillFile);
+      confirmBtn.textContent = 'Uploading…';
+      const ext = compressedWaybill.name.split('.').pop();
       const path = `${pendingCollectId}-waybill-${Date.now()}.${ext}`;
-      const { error: waybillError } = await sb.storage.from('waybills').upload(path, waybillFile);
+      const { error: waybillError } = await sb.storage.from('waybills').upload(path, compressedWaybill);
       if(waybillError){
         showToast('Waybill upload failed: ' + waybillError.message);
         confirmBtn.disabled = false;
@@ -1007,12 +1149,32 @@
       waybillUrl = path;
     }
 
+    let signatureUrl = null;
+    const sigRecord = repairs.find(x => x.id === pendingCollectId);
+    const signatureBlob = await getSignatureBlob({
+      name: sigRecord ? sigRecord.name : '',
+      job: sigRecord ? sigRecord.job_number : ''
+    });
+    if(signatureBlob){
+      confirmBtn.textContent = 'Uploading…';
+      const path = `${pendingCollectId}-signature-${Date.now()}.jpg`;
+      const { error: sigError } = await sb.storage.from('signatures').upload(path, signatureBlob);
+      if(sigError){
+        showToast('Signature upload failed: ' + sigError.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Mark Collected';
+        return;
+      }
+      signatureUrl = path;
+    }
+
     const r = repairs.find(x => x.id === pendingCollectId);
 
     const { error } = await sb.from('repairs').update({
       collected: true,
       collected_at: new Date().toISOString(),
       collected_photo_url: photoUrl,
+      signature_url: signatureUrl,
       is_courier: isCourier,
       courier_address: isCourier ? courierAddress : null,
       waybill_url: waybillUrl,
@@ -1052,12 +1214,14 @@
     confirmBtn.textContent = 'Mark Collected';
     fileInput.value = '';
     document.getElementById('waybillFile').value = '';
+    clearSignaturePad();
     document.getElementById('collectModal').classList.remove('show');
 
     if(r){
       r.collected = true;
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
+      r.signature_url = signatureUrl;
       r.is_courier = isCourier;
       r.courier_address = isCourier ? courierAddress : null;
       r.waybill_url = waybillUrl;
@@ -1149,6 +1313,7 @@
 
   let renderInProgress = false;
   let renderPending = false;
+  const signedUrlCache = new Map(); // path -> { url, expiresAt } — avoids re-signing/re-downloading photos on every render
 
   async function renderTable(){
     // Prevent concurrent renders — if one is already running, flag it and return.
@@ -1251,38 +1416,44 @@
     });
 
     // COLLECTED section
-    const collectedRows = allRows.filter(r => r.collected);
+    let collectedRows = allRows.filter(r => r.collected);
+    // Apply branch filter (independent of the active-tab branch filter)
+    if(collectedFilter !== 'All'){
+      collectedRows = collectedRows.filter(r => r.branch === collectedFilter);
+    }
+
     const cBody = document.getElementById('collectedBody');
     const cEmpty = document.getElementById('collectedEmptyState');
+    const cPagination = document.getElementById('collectedPagination');
     cBody.innerHTML = '';
 
     if(collectedRows.length === 0){
       cEmpty.style.display = 'block';
+      cPagination.style.display = 'none';
     } else {
       cEmpty.style.display = 'none';
-      for(const r of collectedRows){
+
+      // Pagination maths
+      const totalPages = Math.max(1, Math.ceil(collectedRows.length / COLLECTED_PER_PAGE));
+      if(collectedPage > totalPages) collectedPage = totalPages;
+      if(collectedPage < 1) collectedPage = 1;
+      const startIdx = (collectedPage - 1) * COLLECTED_PER_PAGE;
+      const pageRows = collectedRows.slice(startIdx, startIdx + COLLECTED_PER_PAGE);
+
+      for(const r of pageRows){
         const tr = document.createElement('tr');
         const collectedDate = r.collected_at ? new Date(r.collected_at).toLocaleString() : '';
-        let photoHtml = '';
-        if(r.collected_photo_url){
-          // Support both old full public URLs (legacy) and new stored paths
-          const isPath = !r.collected_photo_url.startsWith('http');
-          let signedUrl = null;
-          if(isPath){
-            const { data } = await sb.storage.from('collection-photos').createSignedUrl(r.collected_photo_url, 3600);
-            signedUrl = data?.signedUrl;
-          } else {
-            // Legacy: extract path from old public URL and sign it
-            const parts = r.collected_photo_url.split('/collection-photos/');
-            if(parts[1]){
-              const { data } = await sb.storage.from('collection-photos').createSignedUrl(parts[1], 3600);
-              signedUrl = data?.signedUrl;
-            }
-          }
-          if(signedUrl){
-            photoHtml = `<br><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener"><img src="${escapeHtml(signedUrl)}" alt="Collection photo" style="width:60px;height:60px;object-fit:cover;border-radius:4px;margin-top:4px;border:1px solid var(--gray-border);"></a>`;
-          }
-        }
+        // Photos are never auto-loaded or pre-fetched here — that was the
+        // actual cause of the egress overuse (every logged-in browser was
+        // silently re-downloading every collected photo on every sync event).
+        // Instead we just show a link; the signed URL is only generated and
+        // the image only downloaded if someone actually clicks it.
+        const photoHtml = r.collected_photo_url
+          ? `<br><a href="#" class="view-file-link" data-file-path="${escapeHtml(r.collected_photo_url)}" data-bucket="collection-photos" data-viewer-title="${escapeHtml('Collection note — ' + r.name + ' · Job ' + r.job_number)}" style="font-size:11.5px;color:var(--accent, #1d4f8a);text-decoration:underline;">📷 Collection note available to view</a>`
+          : '';
+        const sigHtml = r.signature_url
+          ? `<br><a href="#" class="view-file-link" data-file-path="${escapeHtml(r.signature_url)}" data-bucket="signatures" data-viewer-title="${escapeHtml('Signature — ' + r.name + ' · Job ' + r.job_number)}" style="font-size:11.5px;color:var(--accent, #1d4f8a);text-decoration:underline;">✍ Signature available to view</a>`
+          : '';
         tr.innerHTML = `
           <td data-label="To Branch">${escapeHtml(r.branch)}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
@@ -1290,18 +1461,139 @@
           <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
-          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}</td>
+          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}${sigHtml}</td>
           <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
         `;
         cBody.appendChild(tr);
       }
+
+      // Pagination controls
+      if(collectedRows.length > COLLECTED_PER_PAGE){
+        cPagination.style.display = 'flex';
+        document.getElementById('collectedPageInfo').textContent =
+          `Page ${collectedPage} of ${totalPages}  ·  ${collectedRows.length} items`;
+        document.getElementById('collectedPrev').disabled = (collectedPage <= 1);
+        document.getElementById('collectedNext').disabled = (collectedPage >= totalPages);
+        document.getElementById('collectedPrev').style.opacity = (collectedPage <= 1) ? '0.4' : '1';
+        document.getElementById('collectedNext').style.opacity = (collectedPage >= totalPages) ? '0.4' : '1';
+      } else {
+        cPagination.style.display = 'none';
+      }
     }
     wireCollectedDeleteButtons();
+    wireViewFileLinks();
   } // end _doRender
+
+  async function openStorageFile(path, bucket, linkEl, title){
+    const originalText = linkEl.textContent;
+    linkEl.textContent = 'Loading…';
+
+    // Show the modal immediately with a loading state
+    document.getElementById('viewerTitle').textContent = title || 'Preview';
+    document.getElementById('viewerBody').innerHTML = '<span style="color:var(--gray-text);font-size:0.85rem;">Loading…</span>';
+    document.getElementById('viewerModal').classList.add('show');
+
+    const isPath = !path.startsWith('http');
+    const cacheKey = bucket + ':' + path;
+    const cached = signedUrlCache.get(cacheKey);
+    let signedUrl = null;
+    if(cached && cached.expiresAt > Date.now()){
+      signedUrl = cached.url;
+    } else if(isPath){
+      const { data } = await sb.storage.from(bucket).createSignedUrl(path, 3600);
+      signedUrl = data?.signedUrl;
+    } else {
+      // Legacy: extract path from an old full public URL and sign it
+      const parts = path.split('/' + bucket + '/');
+      if(parts[1]){
+        const { data } = await sb.storage.from(bucket).createSignedUrl(parts[1], 3600);
+        signedUrl = data?.signedUrl;
+      }
+    }
+
+    linkEl.textContent = originalText;
+
+    if(signedUrl){
+      signedUrlCache.set(cacheKey, { url: signedUrl, expiresAt: Date.now() + 55*60*1000 });
+      const isPdf = /\.pdf(\?|$)/i.test(path);
+      const body = document.getElementById('viewerBody');
+      if(isPdf){
+        body.innerHTML = `<div style="text-align:center;"><p style="font-size:0.85rem;color:var(--gray-text);margin-bottom:10px;">PDF document</p><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener" style="color:var(--accent, #1d4f8a);text-decoration:underline;">Open PDF in new tab</a></div>`;
+      } else {
+        body.innerHTML = `<img src="${escapeHtml(signedUrl)}" alt="Preview" style="max-width:100%;max-height:60vh;border-radius:6px;border:1px solid var(--gray-border);">`;
+      }
+    } else {
+      document.getElementById('viewerModal').classList.remove('show');
+      showToast('Could not load the file — please try again');
+    }
+  }
+
+  document.getElementById('closeViewer').addEventListener('click', () => {
+    document.getElementById('viewerModal').classList.remove('show');
+    document.getElementById('viewerBody').innerHTML = '';
+  });
+  document.getElementById('viewerModal').addEventListener('click', (e) => {
+    // Close when clicking the dark overlay outside the modal box
+    if(e.target === document.getElementById('viewerModal')){
+      document.getElementById('viewerModal').classList.remove('show');
+      document.getElementById('viewerBody').innerHTML = '';
+    }
+  });
+
+  function wireViewFileLinks(){
+    document.querySelectorAll('.view-file-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        openStorageFile(link.dataset.filePath, link.dataset.bucket, link, link.dataset.viewerTitle);
+      });
+    });
+  }
 
   function wireCollectedDeleteButtons(){
     document.querySelectorAll('#collectedBody .delete-btn').forEach(btn => {
       btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+    });
+  }
+
+  // Resize/compress an image file before upload so it never exceeds roughly
+  // A4-page dimensions (1240x1754 at ~150dpi) and re-encodes it as a
+  // reasonable-quality JPEG. This is what keeps photo uploads — and the
+  // repeated downloads of them — from eating through the storage/egress
+  // quota. Non-image files (e.g. PDF waybills) are returned untouched.
+  function compressImage(file, maxDimension = 1240, quality = 0.8){
+    return new Promise((resolve) => {
+      if(!file.type || !file.type.startsWith('image/')){
+        resolve(file); // not an image (e.g. PDF) — leave as-is
+        return;
+      }
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = (e) => { img.src = e.target.result; };
+      reader.onerror = () => resolve(file); // fall back to original on any read error
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > maxDimension || height > maxDimension){
+          if(width >= height){
+            height = Math.round(height * (maxDimension / width));
+            width = maxDimension;
+          } else {
+            width = Math.round(width * (maxDimension / height));
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if(!blob){ resolve(file); return; }
+          const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+          resolve(compressedFile);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => resolve(file); // fall back to original if it can't be decoded
+      reader.readAsDataURL(file);
     });
   }
 
