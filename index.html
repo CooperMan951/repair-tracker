@@ -394,6 +394,7 @@
     <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
     <button class="admin-btn" id="statsBtn" style="display:none;">Stats</button>
     <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
+    <button class="admin-btn" id="changePwBtn" style="display:none;">Password</button>
     <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
   </div>
 </header>
@@ -642,6 +643,21 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="changePwModal">
+  <div class="modal" style="max-width:400px;">
+    <h3>Change Your Password</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Set a new password only you know. You'll stay logged in.</p>
+    <label for="newPwInput">New password</label>
+    <input type="password" id="newPwInput" autocomplete="new-password" placeholder="At least 8 characters">
+    <label for="confirmPwInput" style="margin-top:10px;display:block;">Confirm new password</label>
+    <input type="password" id="confirmPwInput" autocomplete="new-password" placeholder="Re-enter new password">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelChangePw">Cancel</button>
+      <button class="confirm" id="confirmChangePw">Update Password</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
@@ -668,6 +684,7 @@
     document.getElementById('appContent').style.display = 'none';
     document.getElementById('signOutBtn').style.display = 'none';
     document.getElementById('adminBtn').style.display = 'none';
+    document.getElementById('changePwBtn').style.display = 'none';
     document.getElementById('statsBtn').style.display = 'none';
     document.getElementById('userEmailLabel').textContent = '';
   }
@@ -696,6 +713,7 @@
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
     document.getElementById('adminBtn').style.display = 'inline-block';
+    document.getElementById('changePwBtn').style.display = 'inline-block';
     document.getElementById('statsBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
     document.getElementById('userEmailLabel').textContent = email;
 
@@ -761,6 +779,32 @@
     if(e.target === document.getElementById('statsModal')){
       document.getElementById('statsModal').classList.remove('show');
     }
+  });
+
+  document.getElementById('changePwBtn').addEventListener('click', () => {
+    document.getElementById('newPwInput').value = '';
+    document.getElementById('confirmPwInput').value = '';
+    document.getElementById('changePwModal').classList.add('show');
+  });
+  document.getElementById('cancelChangePw').addEventListener('click', () => {
+    document.getElementById('changePwModal').classList.remove('show');
+  });
+  document.getElementById('confirmChangePw').addEventListener('click', async () => {
+    const pw = document.getElementById('newPwInput').value;
+    const confirmPw = document.getElementById('confirmPwInput').value;
+    if(pw.length < 8){ showToast('Password must be at least 8 characters'); return; }
+    if(pw !== confirmPw){ showToast('Passwords do not match'); return; }
+
+    const btn = document.getElementById('confirmChangePw');
+    btn.disabled = true;
+    btn.textContent = 'Updating…';
+    const { error } = await sb.auth.updateUser({ password: pw });
+    btn.disabled = false;
+    btn.textContent = 'Update Password';
+
+    if(error){ showToast('Error: ' + error.message); return; }
+    document.getElementById('changePwModal').classList.remove('show');
+    showToast('Password updated successfully');
   });
 
   function renderStats(){
