@@ -442,6 +442,11 @@
   <div class="card" id="repairsCard">
     <h2>Repairs</h2>
 
+    <button id="scanCollectBtn" style="width:100%;padding:12px;margin-bottom:12px;background:#1d8a3f;color:#fff;border:none;border-radius:6px;font-size:0.95rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+      📷 Scan signed slip to collect
+    </button>
+    <input type="file" id="scanCollectInput" accept="image/*" capture="environment" style="display:none;">
+
     <div class="overdue-banner" id="overdueBanner"></div>
 
     <div class="search-wrap" id="searchWrap"></div>
@@ -658,6 +663,22 @@
     <div class="modal-buttons">
       <button class="cancel" id="cancelChangePw">Cancel</button>
       <button class="confirm" id="confirmChangePw">Update Password</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="scanModal">
+  <div class="modal" style="max-width:440px;">
+    <h3 id="scanTitle">Scanning slip…</h3>
+    <div id="scanBody" style="font-size:0.9rem;color:var(--gray-text);">
+      <p id="scanStatus">Reading the job number from the photo…</p>
+    </div>
+    <div class="modal-buttons" id="scanButtons" style="display:none;">
+      <button class="cancel" id="cancelScan">Cancel</button>
+      <button class="confirm" id="confirmScanCollect" style="background:#1d8a3f;">Mark Collected</button>
+    </div>
+    <div class="modal-buttons" id="scanCloseOnly" style="display:none;">
+      <button class="cancel" id="closeScanOnly">Close</button>
     </div>
   </div>
 </div>
@@ -941,6 +962,15 @@
     if(appStarted) return;
     appStarted = true;
     initApp();
+    loadVisionKey();
+  }
+
+  let visionApiKey = '';
+  async function loadVisionKey(){
+    try {
+      const { data, error } = await sb.from('app_settings').select('value').eq('key', 'vision_api_key').single();
+      if(!error && data) visionApiKey = data.value || '';
+    } catch(e){ /* OCR just won't be available; manual collect still works */ }
   }
 
   function showToast(msg){
@@ -1151,6 +1181,171 @@
     showToast('Marked as received');
     pendingReceiveId = null;
     pendingDisposition = null;
+  });
+
+  // ---- Scan signed slip to collect ----
+  // Reads the job number off a photo of the signed slip via Google Vision OCR,
+  // matches it against loaded repairs, and (after a quick confirm) marks it
+  // collected with that photo attached. The OCR call goes browser -> Google
+  // directly, so it doesn't touch Supabase egress.
+  let scanPhotoFile = null;
+  let scanMatchedId = null;
+
+  // Aggressive normaliser so common OCR digit/letter confusions still match.
+  // Every job number starts "O10S" then digits, so this collapses O/0, I/1,
+  // S/5, B/8, Z/2, G/6 to compare like-for-like.
+  function normJob(s){
+    return (s||'').toUpperCase().replace(/\s+/g,'')
+      .replace(/O/g,'0').replace(/I/g,'1').replace(/S/g,'5')
+      .replace(/B/g,'8').replace(/Z/g,'2').replace(/G/g,'6');
+  }
+
+  document.getElementById('scanCollectBtn').addEventListener('click', () => {
+    if(!visionApiKey){
+      showToast('Scan isn\u2019t available right now — use search to collect');
+      return;
+    }
+    document.getElementById('scanCollectInput').value = '';
+    document.getElementById('scanCollectInput').click();
+  });
+
+  document.getElementById('scanCollectInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    scanPhotoFile = file;
+    scanMatchedId = null;
+
+    // Open modal in "reading" state
+    document.getElementById('scanTitle').textContent = 'Scanning slip…';
+    document.getElementById('scanStatus').innerHTML = 'Reading the job number from the photo…';
+    document.getElementById('scanButtons').style.display = 'none';
+    document.getElementById('scanCloseOnly').style.display = 'none';
+    document.getElementById('scanModal').classList.add('show');
+
+    try {
+      // Compress first (also speeds up the OCR upload)
+      const compressed = await compressImage(file);
+      const base64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result.split(',')[1]);
+        r.onerror = reject;
+        r.readAsDataURL(compressed);
+      });
+
+      // Call Google Vision (TEXT_DETECTION) directly from the browser
+      const resp = await fetch('https://vision.googleapis.com/v1/images:annotate?key=' + encodeURIComponent(visionApiKey), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{
+            image: { content: base64 },
+            features: [{ type: 'TEXT_DETECTION' }]
+          }]
+        })
+      });
+      const result = await resp.json();
+      const text = result?.responses?.[0]?.fullTextAnnotation?.text
+                || result?.responses?.[0]?.textAnnotations?.[0]?.description
+                || '';
+
+      if(!text){
+        showScanError('Couldn\u2019t read any text from that photo. Try again, or use search to collect manually.');
+        return;
+      }
+
+      // Match: for each not-yet-collected repair, see if its normalised job
+      // number appears in the normalised OCR text.
+      const ocrNorm = normJob(text);
+      const candidates = repairs.filter(r => !r.collected && r.job_number && ocrNorm.includes(normJob(r.job_number)));
+
+      if(candidates.length === 0){
+        showScanError('No matching open repair found for that slip. Double-check the number, or use search to collect manually.');
+        return;
+      }
+      if(candidates.length > 1){
+        showScanError('That photo matched more than one repair (' +
+          candidates.map(c => escapeHtml(c.job_number)).join(', ') +
+          '). Please collect this one using search instead.');
+        return;
+      }
+
+      // Single confident match — show a confirmation
+      const r = candidates[0];
+      scanMatchedId = r.id;
+      document.getElementById('scanTitle').textContent = 'Confirm collection';
+      document.getElementById('scanStatus').innerHTML =
+        'Found this repair:<br><br>' +
+        '<b>Job:</b> ' + escapeHtml(r.job_number) + '<br>' +
+        '<b>Client:</b> ' + escapeHtml(r.name) + '<br>' +
+        '<b>Item:</b> ' + escapeHtml(r.item) + '<br>' +
+        '<b>Branch:</b> ' + escapeHtml(r.branch) +
+        (r.collected ? '<br><br><span style="color:#c0392b;">Already collected.</span>' : '') +
+        '<br><br>Mark it collected and attach this photo?';
+      document.getElementById('scanButtons').style.display = 'flex';
+      document.getElementById('scanCloseOnly').style.display = 'none';
+    } catch(err){
+      showScanError('Something went wrong reading the photo. Please try again, or use search to collect manually.');
+    }
+  });
+
+  function showScanError(msg){
+    document.getElementById('scanTitle').textContent = 'Scan result';
+    document.getElementById('scanStatus').innerHTML = msg;
+    document.getElementById('scanButtons').style.display = 'none';
+    document.getElementById('scanCloseOnly').style.display = 'flex';
+  }
+
+  document.getElementById('closeScanOnly').addEventListener('click', () => {
+    document.getElementById('scanModal').classList.remove('show');
+    scanPhotoFile = null; scanMatchedId = null;
+  });
+  document.getElementById('cancelScan').addEventListener('click', () => {
+    document.getElementById('scanModal').classList.remove('show');
+    scanPhotoFile = null; scanMatchedId = null;
+  });
+
+  document.getElementById('confirmScanCollect').addEventListener('click', async () => {
+    if(!scanMatchedId || !scanPhotoFile) return;
+    const btn = document.getElementById('confirmScanCollect');
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+
+    let photoUrl = null;
+    try {
+      const compressed = await compressImage(scanPhotoFile);
+      const path = `${scanMatchedId}-${Date.now()}.jpg`;
+      const { error: upErr } = await sb.storage.from('collection-photos').upload(path, compressed);
+      if(upErr){
+        btn.disabled = false; btn.textContent = 'Mark Collected';
+        showToast('Photo upload failed: ' + upErr.message);
+        return;
+      }
+      photoUrl = path;
+    } catch(e){
+      btn.disabled = false; btn.textContent = 'Mark Collected';
+      showToast('Could not process the photo');
+      return;
+    }
+
+    const { error } = await sb.from('repairs').update({
+      collected: true,
+      collected_at: new Date().toISOString(),
+      collected_photo_url: photoUrl
+    }).eq('id', scanMatchedId);
+
+    btn.disabled = false; btn.textContent = 'Mark Collected';
+    document.getElementById('scanModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); scanMatchedId = null; scanPhotoFile = null; return; }
+
+    const r = repairs.find(x => x.id === scanMatchedId);
+    if(r){
+      r.collected = true;
+      r.collected_at = new Date().toISOString();
+      r.collected_photo_url = photoUrl;
+      await renderTable();
+    }
+    showToast('Marked as collected');
+    scanMatchedId = null; scanPhotoFile = null;
   });
 
   function openCollectModal(id){
