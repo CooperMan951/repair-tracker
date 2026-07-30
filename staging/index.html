@@ -843,42 +843,54 @@
   async function loadUnmatched(){
     const body = document.getElementById('unmatchedBody');
     body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading…</p>';
+
+    let data = null, error = null;
     try {
-      const queryPromise = sb.from('unmatched_collections').select('*').eq('handled', false).order('created_at', { ascending: false });
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000));
-      const { data, error } = await Promise.race([queryPromise, timeout]);
-      if(error){ body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Could not load: ' + escapeHtml(error.message) + '</p>'; return; }
-      if(!data || data.length === 0){
-        body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">No unmatched slips. 👍</p>';
-        return;
-      }
-      let h = '';
-      for(const u of data){
-        const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
-        h += `<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">
-          <div style="font-weight:600;">${u.read_number ? escapeHtml(u.read_number) : '(number not read)'}</div>
-          <div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">
-            ${escapeHtml(u.branch||'—')} &middot; ${escapeHtml(u.scanned_by||'')} &middot; ${escapeHtml(when)}
-          </div>
-          <div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-            ${u.photo_url ? `<a href="#" class="view-file-link" data-file-path="${escapeHtml(u.photo_url)}" data-bucket="unmatched-slips" data-viewer-title="${escapeHtml('Unmatched slip ' + (u.read_number||''))}" style="font-size:0.8rem;color:var(--accent,#1d4f8a);text-decoration:underline;">📷 View slip</a>` : ''}
-            <button class="unmatched-remove" data-id="${u.id}" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>
-          </div>
-        </div>`;
-      }
-      body.innerHTML = h;
-      wireViewFileLinks();
-      document.querySelectorAll('.unmatched-remove').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          btn.disabled = true; btn.textContent = 'Removing…';
-          const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
-          if(delErr){ btn.disabled=false; btn.textContent='Remove'; showToast('Error: '+delErr.message); return; }
-          loadUnmatched();
-        });
-      });
+      const res = await sb.from('unmatched_collections').select('*').eq('handled', false);
+      data = res.data; error = res.error;
     } catch(e){
-      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load the list — the connection may be down or restricted. Please try again shortly.</p>';
+      error = { message: (e && e.message) ? e.message : 'connection problem' };
     }
+
+    if(error){
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load: ' + escapeHtml(error.message) +
+        '</p><button id="retryUnmatched" style="margin-top:8px;padding:6px 14px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;cursor:pointer;">Try again</button>';
+      const rb = document.getElementById('retryUnmatched');
+      if(rb) rb.addEventListener('click', loadUnmatched);
+      return;
+    }
+    if(!data || data.length === 0){
+      body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">No unmatched slips. 👍</p>';
+      return;
+    }
+
+    // Sort newest-first in JS (avoids relying on a server-side order clause)
+    data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+    let h = '';
+    for(const u of data){
+      const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
+      h += `<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:600;">${u.read_number ? escapeHtml(u.read_number) : '(number not read)'}</div>
+        <div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">
+          ${escapeHtml(u.branch||'—')} &middot; ${escapeHtml(u.scanned_by||'')} &middot; ${escapeHtml(when)}
+        </div>
+        <div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          ${u.photo_url ? `<a href="#" class="view-file-link" data-file-path="${escapeHtml(u.photo_url)}" data-bucket="unmatched-slips" data-viewer-title="${escapeHtml('Unmatched slip ' + (u.read_number||''))}" style="font-size:0.8rem;color:var(--accent,#1d4f8a);text-decoration:underline;">📷 View slip</a>` : ''}
+          <button class="unmatched-remove" data-id="${u.id}" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>
+        </div>
+      </div>`;
+    }
+    body.innerHTML = h;
+    wireViewFileLinks();
+    document.querySelectorAll('.unmatched-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true; btn.textContent = 'Removing…';
+        const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
+        if(delErr){ btn.disabled=false; btn.textContent='Remove'; showToast('Error: '+delErr.message); return; }
+        loadUnmatched();
+      });
+    });
   }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {
