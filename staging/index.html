@@ -8,6 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ORMS Repair Tracker</title>
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
     --black:#111111;
@@ -962,15 +963,6 @@
     if(appStarted) return;
     appStarted = true;
     initApp();
-    loadVisionKey();
-  }
-
-  let visionApiKey = '';
-  async function loadVisionKey(){
-    try {
-      const { data, error } = await sb.from('app_settings').select('value').eq('key', 'vision_api_key').single();
-      if(!error && data) visionApiKey = data.value || '';
-    } catch(e){ /* OCR just won't be available; manual collect still works */ }
   }
 
   function showToast(msg){
@@ -1201,13 +1193,53 @@
   }
 
   document.getElementById('scanCollectBtn').addEventListener('click', () => {
-    if(!visionApiKey){
-      showToast('Scan isn\u2019t available right now — use search to collect');
+    if(typeof Tesseract === 'undefined'){
+      showToast('Scanner still loading — try again in a moment, or use search');
       return;
     }
     document.getElementById('scanCollectInput').value = '';
     document.getElementById('scanCollectInput').click();
   });
+
+  // Lazily create one reusable on-device OCR worker. First use downloads the
+  // engine + English data from a CDN (a few MB, then cached by the browser) —
+  // this is a one-off, and it's device data, not Supabase egress. All OCR runs
+  // locally on the phone; no photo ever leaves the device for reading.
+  let ocrWorker = null;
+  async function getOcrWorker(){
+    if(ocrWorker) return ocrWorker;
+    ocrWorker = await Tesseract.createWorker('eng');
+    // Job numbers are only O, S and digits — whitelisting these greatly
+    // improves accuracy and stops the reader inventing stray letters.
+    await ocrWorker.setParameters({ tessedit_char_whitelist: 'OS0123456789' });
+    return ocrWorker;
+  }
+
+  // Crop to the top-right region (where the number always sits) before OCR —
+  // faster and far more accurate than reading the whole slip.
+  function cropTopRight(file){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = e => { img.src = e.target.result; };
+      reader.onerror = reject;
+      img.onload = () => {
+        const cropW = Math.round(img.width * 0.6);
+        const cropH = Math.round(img.height * 0.35);
+        const sx = img.width - cropW;
+        // Upscale the crop a little to help the reader with small print
+        const scale = 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = cropW * scale;
+        canvas.height = cropH * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, sx, 0, cropW, cropH, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
 
   document.getElementById('scanCollectInput').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -1215,48 +1247,37 @@
     scanPhotoFile = file;
     scanMatchedId = null;
 
-    // Open modal in "reading" state
     document.getElementById('scanTitle').textContent = 'Scanning slip…';
-    document.getElementById('scanStatus').innerHTML = 'Reading the job number from the photo…';
+    document.getElementById('scanStatus').innerHTML = 'Reading the job number from the photo…<br><span style="font-size:0.8rem;">(first scan may take a few seconds to load the reader)</span>';
     document.getElementById('scanButtons').style.display = 'none';
     document.getElementById('scanCloseOnly').style.display = 'none';
     document.getElementById('scanModal').classList.add('show');
 
     try {
-      // Compress first (also speeds up the OCR upload)
-      const compressed = await compressImage(file);
-      const base64 = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result.split(',')[1]);
-        r.onerror = reject;
-        r.readAsDataURL(compressed);
-      });
+      const cropped = await cropTopRight(file);
+      const worker = await getOcrWorker();
+      const { data } = await worker.recognize(cropped);
+      const text = (data && data.text) ? data.text : '';
 
-      // Call Google Vision (TEXT_DETECTION) directly from the browser
-      const resp = await fetch('https://vision.googleapis.com/v1/images:annotate?key=' + encodeURIComponent(visionApiKey), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requests: [{
-            image: { content: base64 },
-            features: [{ type: 'TEXT_DETECTION' }]
-          }]
-        })
-      });
-      const result = await resp.json();
-      const text = result?.responses?.[0]?.fullTextAnnotation?.text
-                || result?.responses?.[0]?.textAnnotations?.[0]?.description
-                || '';
-
-      if(!text){
-        showScanError('Couldn\u2019t read any text from that photo. Try again, or use search to collect manually.');
+      if(!text.trim()){
+        showScanError('Couldn\u2019t read a number from that photo. Try a clearer, closer shot of the top-right corner, or use search to collect manually.');
         return;
       }
 
-      // Match: for each not-yet-collected repair, see if its normalised job
-      // number appears in the normalised OCR text.
+      // Match the read text against known job numbers. We check both the full
+      // normalised number and its last digits, so a near-miss read still finds
+      // the right repair. Only open (not yet collected) repairs are considered.
       const ocrNorm = normJob(text);
-      const candidates = repairs.filter(r => !r.collected && r.job_number && ocrNorm.includes(normJob(r.job_number)));
+      const strong = [];
+      const loose = [];
+      for(const r of repairs){
+        if(r.collected || !r.job_number) continue;
+        const full = normJob(r.job_number);
+        if(full && ocrNorm.includes(full)){ strong.push(r); continue; }
+        const tail = full.slice(-6);
+        if(tail.length >= 5 && ocrNorm.includes(tail)) loose.push(r);
+      }
+      const candidates = strong.length ? strong : loose;
 
       if(candidates.length === 0){
         showScanError('No matching open repair found for that slip. Double-check the number, or use search to collect manually.');
@@ -1269,7 +1290,6 @@
         return;
       }
 
-      // Single confident match — show a confirmation
       const r = candidates[0];
       scanMatchedId = r.id;
       document.getElementById('scanTitle').textContent = 'Confirm collection';
@@ -1279,7 +1299,6 @@
         '<b>Client:</b> ' + escapeHtml(r.name) + '<br>' +
         '<b>Item:</b> ' + escapeHtml(r.item) + '<br>' +
         '<b>Branch:</b> ' + escapeHtml(r.branch) +
-        (r.collected ? '<br><br><span style="color:#c0392b;">Already collected.</span>' : '') +
         '<br><br>Mark it collected and attach this photo?';
       document.getElementById('scanButtons').style.display = 'flex';
       document.getElementById('scanCloseOnly').style.display = 'none';
