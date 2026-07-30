@@ -664,7 +664,7 @@
   let collectedPage = 1;
   const COLLECTED_PER_PAGE = 10;
 
-  const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
+  const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 3; // 3-month overdue threshold
 
   // ---- Auth ----
 
@@ -797,8 +797,8 @@
       .map(r => (new Date(r.collected_at) - new Date(r.received_at)) / 86400000);
     const avgCollect = colTimes.length ? (colTimes.reduce((a,b)=>a+b,0)/colTimes.length) : null;
 
-    // Overdue (received, not collected, >6 months)
-    const SIX = 1000*60*60*24*30*6;
+    // Overdue (received, not collected, >3 months)
+    const SIX = 1000*60*60*24*30*3;
     const overdue = all.filter(r => r.received && !r.collected && r.received_at && (now - new Date(r.received_at).getTime()) > SIX).length;
 
     // Special flags
@@ -854,7 +854,7 @@
       ${statCard(courier, 'Courier', '#8a5b1d')}
       ${statCard(redo, 'Redos', '#8a5b1d')}
       ${statCard(loanReturn, 'Loan returns', '#1d4f8a')}
-      ${statCard(overdue, 'Overdue (6m+)', overdue > 0 ? '#c0392b' : '#111')}
+      ${statCard(overdue, 'Overdue (3m+)', overdue > 0 ? '#c0392b' : '#111')}
     </div>
     <div style="font-size:0.75rem;color:var(--gray-text,#555);margin-top:12px;">${signatures} collection${signatures===1?'':'s'} captured a digital signature. Figures update live as repairs change.</div>`;
 
@@ -1461,7 +1461,7 @@
     const overdueCount = repairs.filter(isOverdue).length;
     const banner = document.getElementById('overdueBanner');
     if(overdueCount > 0){
-      banner.textContent = `⚠ ${overdueCount} repair${overdueCount > 1 ? 's have' : ' has'} been received but not collected for over 6 months.`;
+      banner.textContent = `⚠ ${overdueCount} repair${overdueCount > 1 ? 's have' : ' has'} been received but not collected for over 3 months.`;
       banner.classList.add('show');
     } else {
       banner.classList.remove('show');
@@ -1497,7 +1497,7 @@
         let statusHtml;
         if(r.received){
           const receivedDate = r.received_at ? new Date(r.received_at).toLocaleString() : '';
-          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}${r.is_loan_return && r.loan_return_disposition ? `<span class="badge redo">${r.loan_return_disposition === 'supplier' ? 'Going back to Supplier' : 'Going back to Store'}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
+          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 3+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}${r.is_loan_return && r.loan_return_disposition ? `<span class="badge redo">${r.loan_return_disposition === 'supplier' ? 'Going back to Supplier' : 'Going back to Store'}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
         } else {
           statusHtml = `<span class="badge pending">Pending</span>`;
         }

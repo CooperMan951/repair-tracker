@@ -392,6 +392,7 @@
   <div class="right">
     <span id="connStatus"></span>
     <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
+    <button class="admin-btn" id="statsBtn" style="display:none;">Stats</button>
     <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
     <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
   </div>
@@ -631,6 +632,16 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="statsModal">
+  <div class="modal" style="max-width:640px;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="margin:0;">Repair Statistics</h3>
+      <button class="cancel" id="closeStats" style="padding:5px 12px;">Close</button>
+    </div>
+    <div id="statsBody"></div>
+  </div>
+</div>
+
 <script>
   const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
@@ -649,7 +660,7 @@
   let collectedPage = 1;
   const COLLECTED_PER_PAGE = 10;
 
-  const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6;
+  const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 3; // 3-month overdue threshold
 
   // ---- Auth ----
 
@@ -658,6 +669,7 @@
     document.getElementById('appContent').style.display = 'none';
     document.getElementById('signOutBtn').style.display = 'none';
     document.getElementById('adminBtn').style.display = 'none';
+    document.getElementById('statsBtn').style.display = 'none';
     document.getElementById('userEmailLabel').textContent = '';
   }
 
@@ -678,11 +690,14 @@
     'clinton.olckers@orms.co.za':    'Cape Town',
   };
 
+  const ADMIN_EMAILS = ['arno.cooper@orms.co.za', 'bronwyn.jefferys@orms.co.za'];
+
   function showLoggedIn(email){
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
     document.getElementById('adminBtn').style.display = 'inline-block';
+    document.getElementById('statsBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
     document.getElementById('userEmailLabel').textContent = email;
 
     // Set default branch filter based on who logged in
@@ -735,6 +750,112 @@
     document.getElementById('adminPinForUser').value = '';
     document.getElementById('adminModal').classList.add('show');
   });
+
+  document.getElementById('statsBtn').addEventListener('click', () => {
+    renderStats();
+    document.getElementById('statsModal').classList.add('show');
+  });
+  document.getElementById('closeStats').addEventListener('click', () => {
+    document.getElementById('statsModal').classList.remove('show');
+  });
+  document.getElementById('statsModal').addEventListener('click', (e) => {
+    if(e.target === document.getElementById('statsModal')){
+      document.getElementById('statsModal').classList.remove('show');
+    }
+  });
+
+  function renderStats(){
+    const all = repairs;
+    const now = Date.now();
+    const THIRTY = 1000*60*60*24*30;
+    const last30 = all.filter(r => r.created_at && (now - new Date(r.created_at).getTime()) <= THIRTY);
+
+    // Status counts
+    const pending = all.filter(r => !r.received && !r.collected).length;
+    const active = all.filter(r => r.received && !r.collected).length;
+    const collected = all.filter(r => r.collected).length;
+
+    // Per-branch (To Branch) counts
+    const branches = ['Cape Town', 'Bellville', 'Somerset'];
+    const byBranch = branches.map(b => ({
+      branch: b,
+      total: all.filter(r => r.branch === b).length,
+      pending: all.filter(r => r.branch === b && !r.received && !r.collected).length,
+      active: all.filter(r => r.branch === b && r.received && !r.collected).length,
+      collected: all.filter(r => r.branch === b && r.collected).length,
+    }));
+
+    // Averages (hours to receive, days to collect)
+    const recTimes = all.filter(r => r.received_at && r.created_at)
+      .map(r => (new Date(r.received_at) - new Date(r.created_at)) / 3600000);
+    const avgReceive = recTimes.length ? (recTimes.reduce((a,b)=>a+b,0)/recTimes.length) : null;
+    const colTimes = all.filter(r => r.collected_at && r.received_at)
+      .map(r => (new Date(r.collected_at) - new Date(r.received_at)) / 86400000);
+    const avgCollect = colTimes.length ? (colTimes.reduce((a,b)=>a+b,0)/colTimes.length) : null;
+
+    // Overdue (received, not collected, >3 months)
+    const SIX = 1000*60*60*24*30*3;
+    const overdue = all.filter(r => r.received && !r.collected && r.received_at && (now - new Date(r.received_at).getTime()) > SIX).length;
+
+    // Special flags
+    const courier = all.filter(r => r.is_courier).length;
+    const redo = all.filter(r => r.is_redo).length;
+    const loanReturn = all.filter(r => r.is_loan_return).length;
+    const signatures = all.filter(r => r.signature_url).length;
+
+    const statCard = (num, label, color) =>
+      `<div style="background:var(--gray-bg,#f4f4f4);border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:14px;text-align:center;">
+        <div style="font-size:1.8rem;font-weight:700;color:${color||'#111'};">${num}</div>
+        <div style="font-size:0.72rem;color:var(--gray-text,#555);text-transform:uppercase;letter-spacing:0.4px;margin-top:2px;">${label}</div>
+      </div>`;
+
+    let h = '';
+
+    // Headline grid
+    h += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;">
+      ${statCard(all.length, 'Total repairs', '#1d4f8a')}
+      ${statCard(pending, 'Pending', '#5a4500')}
+      ${statCard(active, 'Active', '#1d8a3f')}
+      ${statCard(collected, 'Collected', '#1d4f8a')}
+    </div>`;
+
+    // Timing + last 30 days
+    h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">
+      ${statCard(last30.length, 'Logged (last 30 days)', '#111')}
+      ${statCard(avgReceive !== null ? avgReceive.toFixed(1) + ' hrs' : '—', 'Avg. time to receive', '#111')}
+      ${statCard(avgCollect !== null ? avgCollect.toFixed(1) + ' days' : '—', 'Avg. time to collect', '#111')}
+    </div>`;
+
+    // Per-branch table
+    h += `<h4 style="margin:18px 0 8px;font-size:0.95rem;">By branch</h4>
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead><tr style="text-align:left;color:var(--gray-text,#555);font-size:0.72rem;text-transform:uppercase;">
+          <th style="padding:6px 4px;">Branch</th><th style="padding:6px 4px;">Total</th>
+          <th style="padding:6px 4px;">Pending</th><th style="padding:6px 4px;">Active</th><th style="padding:6px 4px;">Collected</th>
+        </tr></thead><tbody>`;
+    byBranch.forEach(b => {
+      h += `<tr style="border-top:1px solid var(--gray-border,#dcdcdc);">
+        <td style="padding:7px 4px;font-weight:600;">${b.branch}</td>
+        <td style="padding:7px 4px;">${b.total}</td>
+        <td style="padding:7px 4px;">${b.pending}</td>
+        <td style="padding:7px 4px;">${b.active}</td>
+        <td style="padding:7px 4px;">${b.collected}</td>
+      </tr>`;
+    });
+    h += `</tbody></table>`;
+
+    // Flags row
+    h += `<h4 style="margin:18px 0 8px;font-size:0.95rem;">Special handling</h4>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:8px;">
+      ${statCard(courier, 'Courier', '#8a5b1d')}
+      ${statCard(redo, 'Redos', '#8a5b1d')}
+      ${statCard(loanReturn, 'Loan returns', '#1d4f8a')}
+      ${statCard(overdue, 'Overdue (3m+)', overdue > 0 ? '#c0392b' : '#111')}
+    </div>
+    <div style="font-size:0.75rem;color:var(--gray-text,#555);margin-top:12px;">${signatures} collection${signatures===1?'':'s'} captured a digital signature. Figures update live as repairs change.</div>`;
+
+    document.getElementById('statsBody').innerHTML = h;
+  }
 
   document.getElementById('cancelAdmin').addEventListener('click', () => {
     document.getElementById('adminModal').classList.remove('show');
@@ -1336,7 +1457,7 @@
     const overdueCount = repairs.filter(isOverdue).length;
     const banner = document.getElementById('overdueBanner');
     if(overdueCount > 0){
-      banner.textContent = `⚠ ${overdueCount} repair${overdueCount > 1 ? 's have' : ' has'} been received but not collected for over 6 months.`;
+      banner.textContent = `⚠ ${overdueCount} repair${overdueCount > 1 ? 's have' : ' has'} been received but not collected for over 3 months.`;
       banner.classList.add('show');
     } else {
       banner.classList.remove('show');
@@ -1372,7 +1493,7 @@
         let statusHtml;
         if(r.received){
           const receivedDate = r.received_at ? new Date(r.received_at).toLocaleString() : '';
-          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 6+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}${r.is_loan_return && r.loan_return_disposition ? `<span class="badge redo">${r.loan_return_disposition === 'supplier' ? 'Going back to Supplier' : 'Going back to Store'}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
+          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 3+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}${r.is_loan_return && r.loan_return_disposition ? `<span class="badge redo">${r.loan_return_disposition === 'supplier' ? 'Going back to Supplier' : 'Going back to Store'}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
         } else {
           statusHtml = `<span class="badge pending">Pending</span>`;
         }
@@ -1612,6 +1733,10 @@
     if(error){ showToast('Load error: ' + error.message); return; }
     repairs = data;
     await renderTable();
+    // If the admin Stats modal is currently open, refresh its figures live
+    if(document.getElementById('statsModal').classList.contains('show')){
+      renderStats();
+    }
   }
 
   sb.channel('repairs-changes')
