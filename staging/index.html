@@ -398,6 +398,7 @@
     <span id="connStatus"></span>
     <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
     <button class="admin-btn" id="statsBtn" style="display:none;">Stats</button>
+    <button class="admin-btn" id="unmatchedBtn" style="display:none;">Unmatched</button>
     <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
     <button class="admin-btn" id="changePwBtn" style="display:none;">Password</button>
     <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
@@ -680,7 +681,19 @@
     </div>
     <div class="modal-buttons" id="scanCloseOnly" style="display:none;">
       <button class="cancel" id="closeScanOnly">Close</button>
+      <button class="confirm" id="saveUnmatchedBtn" style="background:#8a5b1d;display:none;">Save slip for later</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="unmatchedModal">
+  <div class="modal" style="max-width:560px;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="margin:0;">Unmatched Slips</h3>
+      <button class="cancel" id="closeUnmatched" style="padding:5px 12px;">Close</button>
+    </div>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Slips scanned for jobs not yet logged. Log the repair when ready, then remove the slip here.</p>
+    <div id="unmatchedBody"></div>
   </div>
 </div>
 
@@ -710,6 +723,7 @@
     document.getElementById('appContent').style.display = 'none';
     document.getElementById('signOutBtn').style.display = 'none';
     document.getElementById('adminBtn').style.display = 'none';
+    document.getElementById('unmatchedBtn').style.display = 'none';
     document.getElementById('changePwBtn').style.display = 'none';
     document.getElementById('statsBtn').style.display = 'none';
     document.getElementById('userEmailLabel').textContent = '';
@@ -741,6 +755,7 @@
     document.getElementById('adminBtn').style.display = 'inline-block';
     document.getElementById('changePwBtn').style.display = 'inline-block';
     document.getElementById('statsBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
+    document.getElementById('unmatchedBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
     document.getElementById('userEmailLabel').textContent = email;
 
     // Set default branch filter based on who logged in
@@ -806,6 +821,54 @@
       document.getElementById('statsModal').classList.remove('show');
     }
   });
+
+  document.getElementById('unmatchedBtn').addEventListener('click', () => {
+    document.getElementById('unmatchedModal').classList.add('show');
+    loadUnmatched();
+  });
+  document.getElementById('closeUnmatched').addEventListener('click', () => {
+    document.getElementById('unmatchedModal').classList.remove('show');
+  });
+  document.getElementById('unmatchedModal').addEventListener('click', (e) => {
+    if(e.target === document.getElementById('unmatchedModal')){
+      document.getElementById('unmatchedModal').classList.remove('show');
+    }
+  });
+
+  async function loadUnmatched(){
+    const body = document.getElementById('unmatchedBody');
+    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading…</p>';
+    const { data, error } = await sb.from('unmatched_collections').select('*').eq('handled', false).order('created_at', { ascending: false });
+    if(error){ body.innerHTML = '<p style="color:#c0392b;">Could not load: ' + escapeHtml(error.message) + '</p>'; return; }
+    if(!data || data.length === 0){
+      body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">No unmatched slips. 👍</p>';
+      return;
+    }
+    let h = '';
+    for(const u of data){
+      const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
+      h += `<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:600;">${u.read_number ? escapeHtml(u.read_number) : '(number not read)'}</div>
+        <div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">
+          ${escapeHtml(u.branch||'—')} &middot; ${escapeHtml(u.scanned_by||'')} &middot; ${escapeHtml(when)}
+        </div>
+        <div style="margin-top:8px;display:flex;gap:12px;align-items:center;">
+          ${u.photo_url ? `<a href="#" class="view-file-link" data-file-path="${escapeHtml(u.photo_url)}" data-bucket="unmatched-slips" data-viewer-title="${escapeHtml('Unmatched slip ' + (u.read_number||''))}" style="font-size:0.8rem;color:var(--accent,#1d4f8a);text-decoration:underline;">📷 View slip</a>` : ''}
+          <button class="unmatched-remove" data-id="${u.id}" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>
+        </div>
+      </div>`;
+    }
+    body.innerHTML = h;
+    wireViewFileLinks();
+    document.querySelectorAll('.unmatched-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true; btn.textContent = 'Removing…';
+        const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
+        if(delErr){ btn.disabled=false; btn.textContent='Remove'; showToast('Error: '+delErr.message); return; }
+        loadUnmatched();
+      });
+    });
+  }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {
     document.getElementById('newPwInput').value = '';
@@ -1182,6 +1245,7 @@
   // directly, so it doesn't touch Supabase egress.
   let scanPhotoFile = null;
   let scanMatchedId = null;
+  let scanReadNumber = '';
 
   // Aggressive normaliser so common OCR digit/letter confusions still match.
   // Every job number starts "O10S" then digits, so this collapses O/0, I/1,
@@ -1259,8 +1323,18 @@
       const { data } = await worker.recognize(cropped);
       const text = (data && data.text) ? data.text : '';
 
+      // Best-effort extraction of an O10S-style number for reference/storage.
+      // (The photo is the real record; this is just a human-readable label.)
+      scanReadNumber = '';
+      const m = text.toUpperCase().replace(/\s+/g,'').match(/O?10S\d{4,8}/);
+      if(m) scanReadNumber = m[0];
+      else {
+        const digits = text.replace(/\D+/g,'');
+        if(digits.length >= 5) scanReadNumber = 'O10S' + digits.slice(-6);
+      }
+
       if(!text.trim()){
-        showScanError('Couldn\u2019t read a number from that photo. Try a clearer, closer shot of the top-right corner, or use search to collect manually.');
+        showScanError('Couldn\u2019t read a number from that photo. If this job hasn\u2019t been logged yet, you can save the slip to deal with later, or use search to collect manually.', true);
         return;
       }
 
@@ -1280,13 +1354,14 @@
       const candidates = strong.length ? strong : loose;
 
       if(candidates.length === 0){
-        showScanError('No matching open repair found for that slip. Double-check the number, or use search to collect manually.');
+        showScanError('No matching open repair found' + (scanReadNumber ? ' for <b>' + escapeHtml(scanReadNumber) + '</b>' : '') +
+          '. If this job hasn\u2019t been logged yet, you can save the slip to deal with later — or double-check the number and use search.', true);
         return;
       }
       if(candidates.length > 1){
         showScanError('That photo matched more than one repair (' +
           candidates.map(c => escapeHtml(c.job_number)).join(', ') +
-          '). Please collect this one using search instead.');
+          '). Please collect this one using search instead.', false);
         return;
       }
 
@@ -1307,20 +1382,52 @@
     }
   });
 
-  function showScanError(msg){
+  function showScanError(msg, allowSave){
     document.getElementById('scanTitle').textContent = 'Scan result';
     document.getElementById('scanStatus').innerHTML = msg;
     document.getElementById('scanButtons').style.display = 'none';
     document.getElementById('scanCloseOnly').style.display = 'flex';
+    document.getElementById('saveUnmatchedBtn').style.display = allowSave ? 'inline-block' : 'none';
   }
 
   document.getElementById('closeScanOnly').addEventListener('click', () => {
     document.getElementById('scanModal').classList.remove('show');
-    scanPhotoFile = null; scanMatchedId = null;
+    scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
   });
   document.getElementById('cancelScan').addEventListener('click', () => {
     document.getElementById('scanModal').classList.remove('show');
-    scanPhotoFile = null; scanMatchedId = null;
+    scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
+  });
+
+  // Save an unmatched slip aside (photo + best-guess number) to reconcile later
+  document.getElementById('saveUnmatchedBtn').addEventListener('click', async () => {
+    if(!scanPhotoFile) return;
+    const btn = document.getElementById('saveUnmatchedBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      const compressed = await compressImage(scanPhotoFile);
+      const path = `unmatched-${Date.now()}.jpg`;
+      const { error: upErr } = await sb.storage.from('unmatched-slips').upload(path, compressed);
+      if(upErr){ btn.disabled=false; btn.textContent='Save slip for later'; showToast('Upload failed: '+upErr.message); return; }
+
+      const myEmail = document.getElementById('userEmailLabel').textContent.toLowerCase();
+      const { error: insErr } = await sb.from('unmatched_collections').insert({
+        read_number: scanReadNumber || null,
+        photo_url: path,
+        scanned_by: myEmail,
+        branch: USER_BRANCH_MAP[myEmail] || null
+      });
+      btn.disabled = false; btn.textContent = 'Save slip for later';
+      if(insErr){ showToast('Save failed: '+insErr.message); return; }
+
+      document.getElementById('scanModal').classList.remove('show');
+      scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
+      showToast('Slip saved for later');
+    } catch(e){
+      btn.disabled = false; btn.textContent = 'Save slip for later';
+      showToast('Could not save the slip');
+    }
   });
 
   document.getElementById('confirmScanCollect').addEventListener('click', async () => {
