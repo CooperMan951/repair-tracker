@@ -8,6 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ORMS Repair Tracker</title>
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
     --black:#111111;
@@ -20,6 +21,7 @@
     --red:#c0392b;
   }
   *{box-sizing:border-box;}
+  html, body{ max-width:100%; overflow-x:hidden; }
   body{
     margin:0;
     font-family:'Segoe UI', Arial, sans-serif;
@@ -33,6 +35,8 @@
     display:flex;
     align-items:center;
     justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
   }
   header h1{
     margin:0;
@@ -284,6 +288,8 @@
     display:flex;
     align-items:center;
     gap:12px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
   }
   .section-toggle{
     display:flex;
@@ -393,6 +399,7 @@
     <span id="connStatus"></span>
     <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
     <button class="admin-btn" id="statsBtn" style="display:none;">Stats</button>
+    <button class="admin-btn" id="unmatchedBtn" style="display:none;">Unmatched</button>
     <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
     <button class="admin-btn" id="changePwBtn" style="display:none;">Password</button>
     <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
@@ -437,6 +444,11 @@
 
   <div class="card" id="repairsCard">
     <h2>Repairs</h2>
+
+    <button id="scanCollectBtn" style="display:none;width:100%;padding:12px;margin-bottom:12px;background:#1d8a3f;color:#fff;border:none;border-radius:6px;font-size:0.95rem;font-weight:600;cursor:pointer;align-items:center;justify-content:center;gap:8px;">
+      📷 Scan signed slip to collect
+    </button>
+    <input type="file" id="scanCollectInput" accept="image/*" capture="environment" style="display:none;">
 
     <div class="overdue-banner" id="overdueBanner"></div>
 
@@ -658,6 +670,34 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="scanModal">
+  <div class="modal" style="max-width:440px;">
+    <h3 id="scanTitle">Scanning slip…</h3>
+    <div id="scanBody" style="font-size:0.9rem;color:var(--gray-text);">
+      <p id="scanStatus">Reading the job number from the photo…</p>
+    </div>
+    <div class="modal-buttons" id="scanButtons" style="display:none;">
+      <button class="cancel" id="cancelScan">Cancel</button>
+      <button class="confirm" id="confirmScanCollect" style="background:#1d8a3f;">Mark Collected</button>
+    </div>
+    <div class="modal-buttons" id="scanCloseOnly" style="display:none;">
+      <button class="cancel" id="closeScanOnly">Close</button>
+      <button class="confirm" id="saveUnmatchedBtn" style="background:#8a5b1d;display:none;">Save slip for later</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="unmatchedModal">
+  <div class="modal" style="max-width:560px;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="margin:0;">Unmatched Slips</h3>
+      <button class="cancel" id="closeUnmatched" style="padding:5px 12px;">Close</button>
+    </div>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Slips scanned for jobs not yet logged. Log the repair when ready, then remove the slip here.</p>
+    <div id="unmatchedBody"></div>
+  </div>
+</div>
+
 <script>
   const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
@@ -684,6 +724,7 @@
     document.getElementById('appContent').style.display = 'none';
     document.getElementById('signOutBtn').style.display = 'none';
     document.getElementById('adminBtn').style.display = 'none';
+    document.getElementById('unmatchedBtn').style.display = 'none';
     document.getElementById('changePwBtn').style.display = 'none';
     document.getElementById('statsBtn').style.display = 'none';
     document.getElementById('userEmailLabel').textContent = '';
@@ -715,6 +756,7 @@
     document.getElementById('adminBtn').style.display = 'inline-block';
     document.getElementById('changePwBtn').style.display = 'inline-block';
     document.getElementById('statsBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
+    document.getElementById('unmatchedBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
     document.getElementById('userEmailLabel').textContent = email;
 
     // Set default branch filter based on who logged in
@@ -780,6 +822,72 @@
       document.getElementById('statsModal').classList.remove('show');
     }
   });
+
+  document.getElementById('unmatchedBtn').addEventListener('click', () => {
+    document.getElementById('unmatchedModal').classList.add('show');
+    loadUnmatched();
+  });
+  document.getElementById('closeUnmatched').addEventListener('click', () => {
+    document.getElementById('unmatchedModal').classList.remove('show');
+  });
+  document.getElementById('unmatchedModal').addEventListener('click', (e) => {
+    if(e.target === document.getElementById('unmatchedModal')){
+      document.getElementById('unmatchedModal').classList.remove('show');
+    }
+  });
+
+  async function loadUnmatched(){
+    const body = document.getElementById('unmatchedBody');
+    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading…</p>';
+
+    let data = null, error = null;
+    try {
+      const res = await sb.from('unmatched_collections').select('*').eq('handled', false);
+      data = res.data; error = res.error;
+    } catch(e){
+      error = { message: (e && e.message) ? e.message : 'connection problem' };
+    }
+
+    if(error){
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load: ' + escapeHtml(error.message) +
+        '</p><button id="retryUnmatched" style="margin-top:8px;padding:6px 14px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;cursor:pointer;">Try again</button>';
+      const rb = document.getElementById('retryUnmatched');
+      if(rb) rb.addEventListener('click', loadUnmatched);
+      return;
+    }
+    if(!data || data.length === 0){
+      body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">No unmatched slips. 👍</p>';
+      return;
+    }
+
+    // Sort newest-first in JS (avoids relying on a server-side order clause)
+    data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+    let h = '';
+    for(const u of data){
+      const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
+      h += `<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">
+        <div style="font-weight:600;">${u.read_number ? escapeHtml(u.read_number) : '(number not read)'}</div>
+        <div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">
+          ${escapeHtml(u.branch||'—')} &middot; ${escapeHtml(u.scanned_by||'')} &middot; ${escapeHtml(when)}
+        </div>
+        <div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          ${u.photo_url ? `<a href="#" class="view-file-link" data-file-path="${escapeHtml(u.photo_url)}" data-bucket="unmatched-slips" data-viewer-title="${escapeHtml('Unmatched slip ' + (u.read_number||''))}" style="font-size:0.8rem;color:var(--accent,#1d4f8a);text-decoration:underline;">📷 View slip</a>` : ''}
+          <button class="unmatched-remove" data-id="${u.id}" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>
+        </div>
+      </div>`;
+    }
+    body.innerHTML = h;
+    wireViewFileLinks();
+    document.querySelectorAll('.unmatched-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true; btn.textContent = 'Removing…';
+        const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
+        if(delErr){ btn.disabled=false; btn.textContent='Remove'; showToast('Error: '+delErr.message); return; }
+        loadUnmatched();
+      });
+    });
+  }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {
     document.getElementById('newPwInput').value = '';
@@ -1147,6 +1255,255 @@
     showToast('Marked as received');
     pendingReceiveId = null;
     pendingDisposition = null;
+  });
+
+  // ---- Scan signed slip to collect ----
+  // Reads the job number off a photo of the signed slip via Google Vision OCR,
+  // matches it against loaded repairs, and (after a quick confirm) marks it
+  // collected with that photo attached. The OCR call goes browser -> Google
+  // directly, so it doesn't touch Supabase egress.
+  let scanPhotoFile = null;
+  let scanMatchedId = null;
+  let scanReadNumber = '';
+
+  // Aggressive normaliser so common OCR digit/letter confusions still match.
+  // Every job number starts "O10S" then digits, so this collapses O/0, I/1,
+  // S/5, B/8, Z/2, G/6 to compare like-for-like.
+  function normJob(s){
+    return (s||'').toUpperCase().replace(/\s+/g,'')
+      .replace(/O/g,'0').replace(/I/g,'1').replace(/S/g,'5')
+      .replace(/B/g,'8').replace(/Z/g,'2').replace(/G/g,'6');
+  }
+
+  // The slip scanner only makes sense on a phone (needs a rear camera), so
+  // only reveal the button on mobile/touch devices — keep it hidden on desktop.
+  (function revealScanIfMobile(){
+    const ua = navigator.userAgent || '';
+    const isMobileUA = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+    const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    // Treat iPads reporting as desktop (maxTouchPoints) as mobile too.
+    if(isMobileUA || (isTouch && Math.min(window.screen.width, window.screen.height) < 900)){
+      const btn = document.getElementById('scanCollectBtn');
+      if(btn) btn.style.display = 'flex';
+    }
+  })();
+
+  document.getElementById('scanCollectBtn').addEventListener('click', () => {
+    if(typeof Tesseract === 'undefined'){
+      showToast('Scanner still loading — try again in a moment, or use search');
+      return;
+    }
+    document.getElementById('scanCollectInput').value = '';
+    document.getElementById('scanCollectInput').click();
+  });
+
+  // Lazily create one reusable on-device OCR worker. First use downloads the
+  // engine + English data from a CDN (a few MB, then cached by the browser) —
+  // this is a one-off, and it's device data, not Supabase egress. All OCR runs
+  // locally on the phone; no photo ever leaves the device for reading.
+  let ocrWorker = null;
+  async function getOcrWorker(){
+    if(ocrWorker) return ocrWorker;
+    ocrWorker = await Tesseract.createWorker('eng');
+    // Job numbers are only O, S and digits — whitelisting these greatly
+    // improves accuracy and stops the reader inventing stray letters.
+    await ocrWorker.setParameters({ tessedit_char_whitelist: 'OS0123456789' });
+    return ocrWorker;
+  }
+
+  // Crop to the top-right region (where the number always sits) before OCR —
+  // faster and far more accurate than reading the whole slip.
+  function cropTopRight(file){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = e => { img.src = e.target.result; };
+      reader.onerror = reject;
+      img.onload = () => {
+        const cropW = Math.round(img.width * 0.6);
+        const cropH = Math.round(img.height * 0.35);
+        const sx = img.width - cropW;
+        // Upscale the crop a little to help the reader with small print
+        const scale = 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = cropW * scale;
+        canvas.height = cropH * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, sx, 0, cropW, cropH, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  document.getElementById('scanCollectInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    scanPhotoFile = file;
+    scanMatchedId = null;
+
+    document.getElementById('scanTitle').textContent = 'Scanning slip…';
+    document.getElementById('scanStatus').innerHTML = 'Reading the job number from the photo…<br><span style="font-size:0.8rem;">(first scan may take a few seconds to load the reader)</span>';
+    document.getElementById('scanButtons').style.display = 'none';
+    document.getElementById('scanCloseOnly').style.display = 'none';
+    document.getElementById('scanModal').classList.add('show');
+
+    try {
+      const cropped = await cropTopRight(file);
+      const worker = await getOcrWorker();
+      const { data } = await worker.recognize(cropped);
+      const text = (data && data.text) ? data.text : '';
+
+      // Best-effort extraction of an O10S-style number for reference/storage.
+      // Job numbers are always O10S + exactly 6 digits, so we match exactly six
+      // and stop — otherwise the reader can grab a digit from the date/page
+      // number printed right next to it. (The photo is the real record; this is
+      // just a human-readable label.)
+      scanReadNumber = '';
+      const compact = text.toUpperCase().replace(/\s+/g,'');
+      const m = compact.match(/O?10S(\d{6})/);
+      if(m) scanReadNumber = 'O10S' + m[1];
+
+      if(!text.trim()){
+        showScanError('Couldn\u2019t read a number from that photo. If this job hasn\u2019t been logged yet, you can save the slip to deal with later, or use search to collect manually.', true);
+        return;
+      }
+
+      // Match the read text against known job numbers. We check both the full
+      // normalised number and its last digits, so a near-miss read still finds
+      // the right repair. Only open (not yet collected) repairs are considered.
+      const ocrNorm = normJob(text);
+      const strong = [];
+      const loose = [];
+      for(const r of repairs){
+        if(r.collected || !r.job_number) continue;
+        const full = normJob(r.job_number);
+        if(full && ocrNorm.includes(full)){ strong.push(r); continue; }
+        const tail = full.slice(-6);
+        if(tail.length >= 5 && ocrNorm.includes(tail)) loose.push(r);
+      }
+      const candidates = strong.length ? strong : loose;
+
+      if(candidates.length === 0){
+        showScanError('No matching open repair found' + (scanReadNumber ? ' for <b>' + escapeHtml(scanReadNumber) + '</b>' : '') +
+          '. If this job hasn\u2019t been logged yet, you can save the slip to deal with later — or double-check the number and use search.', true);
+        return;
+      }
+      if(candidates.length > 1){
+        showScanError('That photo matched more than one repair (' +
+          candidates.map(c => escapeHtml(c.job_number)).join(', ') +
+          '). Please collect this one using search instead.', false);
+        return;
+      }
+
+      const r = candidates[0];
+      scanMatchedId = r.id;
+      document.getElementById('scanTitle').textContent = 'Confirm collection';
+      document.getElementById('scanStatus').innerHTML =
+        'Found this repair:<br><br>' +
+        '<b>Job:</b> ' + escapeHtml(r.job_number) + '<br>' +
+        '<b>Client:</b> ' + escapeHtml(r.name) + '<br>' +
+        '<b>Item:</b> ' + escapeHtml(r.item) + '<br>' +
+        '<b>Branch:</b> ' + escapeHtml(r.branch) +
+        '<br><br>Mark it collected and attach this photo?';
+      document.getElementById('scanButtons').style.display = 'flex';
+      document.getElementById('scanCloseOnly').style.display = 'none';
+    } catch(err){
+      showScanError('Something went wrong reading the photo. Please try again, or use search to collect manually.');
+    }
+  });
+
+  function showScanError(msg, allowSave){
+    document.getElementById('scanTitle').textContent = 'Scan result';
+    document.getElementById('scanStatus').innerHTML = msg;
+    document.getElementById('scanButtons').style.display = 'none';
+    document.getElementById('scanCloseOnly').style.display = 'flex';
+    document.getElementById('saveUnmatchedBtn').style.display = allowSave ? 'inline-block' : 'none';
+  }
+
+  document.getElementById('closeScanOnly').addEventListener('click', () => {
+    document.getElementById('scanModal').classList.remove('show');
+    scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
+  });
+  document.getElementById('cancelScan').addEventListener('click', () => {
+    document.getElementById('scanModal').classList.remove('show');
+    scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
+  });
+
+  // Save an unmatched slip aside (photo + best-guess number) to reconcile later
+  document.getElementById('saveUnmatchedBtn').addEventListener('click', async () => {
+    if(!scanPhotoFile) return;
+    const btn = document.getElementById('saveUnmatchedBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      const compressed = await compressImage(scanPhotoFile);
+      const path = `unmatched-${Date.now()}.jpg`;
+      const { error: upErr } = await sb.storage.from('unmatched-slips').upload(path, compressed);
+      if(upErr){ btn.disabled=false; btn.textContent='Save slip for later'; showToast('Upload failed: '+upErr.message); return; }
+
+      const myEmail = document.getElementById('userEmailLabel').textContent.toLowerCase();
+      const { error: insErr } = await sb.from('unmatched_collections').insert({
+        read_number: scanReadNumber || null,
+        photo_url: path,
+        scanned_by: myEmail,
+        branch: USER_BRANCH_MAP[myEmail] || null
+      });
+      btn.disabled = false; btn.textContent = 'Save slip for later';
+      if(insErr){ showToast('Save failed: '+insErr.message); return; }
+
+      document.getElementById('scanModal').classList.remove('show');
+      scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
+      showToast('Slip saved for later');
+    } catch(e){
+      btn.disabled = false; btn.textContent = 'Save slip for later';
+      showToast('Could not save the slip');
+    }
+  });
+
+  document.getElementById('confirmScanCollect').addEventListener('click', async () => {
+    if(!scanMatchedId || !scanPhotoFile) return;
+    const btn = document.getElementById('confirmScanCollect');
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+
+    let photoUrl = null;
+    try {
+      const compressed = await compressImage(scanPhotoFile);
+      const path = `${scanMatchedId}-${Date.now()}.jpg`;
+      const { error: upErr } = await sb.storage.from('collection-photos').upload(path, compressed);
+      if(upErr){
+        btn.disabled = false; btn.textContent = 'Mark Collected';
+        showToast('Photo upload failed: ' + upErr.message);
+        return;
+      }
+      photoUrl = path;
+    } catch(e){
+      btn.disabled = false; btn.textContent = 'Mark Collected';
+      showToast('Could not process the photo');
+      return;
+    }
+
+    const { error } = await sb.from('repairs').update({
+      collected: true,
+      collected_at: new Date().toISOString(),
+      collected_photo_url: photoUrl
+    }).eq('id', scanMatchedId);
+
+    btn.disabled = false; btn.textContent = 'Mark Collected';
+    document.getElementById('scanModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); scanMatchedId = null; scanPhotoFile = null; return; }
+
+    const r = repairs.find(x => x.id === scanMatchedId);
+    if(r){
+      r.collected = true;
+      r.collected_at = new Date().toISOString();
+      r.collected_photo_url = photoUrl;
+      await renderTable();
+    }
+    showToast('Marked as collected');
+    scanMatchedId = null; scanPhotoFile = null;
   });
 
   function openCollectModal(id){
