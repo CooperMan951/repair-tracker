@@ -626,7 +626,7 @@
     <label for="newUserEmail">Email address</label>
     <input type="email" id="newUserEmail" autocomplete="off" placeholder="user@orms.co.za">
     <label for="newUserPassword" style="margin-top:10px;display:block;">Temporary password</label>
-    <input type="text" id="newUserPassword" autocomplete="off" placeholder="e.g. Oranges#@!">
+    <input type="text" id="newUserPassword" autocomplete="off" placeholder="Set a strong password">
     <label for="adminPinForUser" style="margin-top:10px;display:block;">Admin PIN</label>
     <input type="password" id="adminPinForUser" inputmode="numeric" autocomplete="off" placeholder="Enter PIN">
     <div class="modal-buttons">
@@ -656,7 +656,6 @@
   let pendingReceiveId = null;
   let pendingCollectId = null;
   let pendingDeleteId = null;
-  const ADMIN_PIN = "3537";
   let repairs = [];
   let searchQuery = "";
   let activeSection = "pending";
@@ -1410,10 +1409,22 @@
   });
   document.getElementById('confirmDelete').addEventListener('click', async () => {
     const pin = document.getElementById('deletePinInput').value.trim();
-    if(pin !== ADMIN_PIN){
-      showToast('Incorrect PIN');
-      return;
-    }
+    if(!pin){ showToast('Please enter the PIN'); return; }
+
+    const confirmBtn = document.getElementById('confirmDelete');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Checking…';
+
+    // Verify the PIN server-side — the PIN itself is never stored in this
+    // front-end code, so it can't be read from the public GitHub source.
+    const { data: pinOk, error: pinErr } = await sb.rpc('verify_admin_pin', { p_pin: pin });
+
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Delete';
+
+    if(pinErr){ showToast('Error: ' + pinErr.message); return; }
+    if(!pinOk){ showToast('Incorrect PIN'); return; }
+
     const { error } = await sb.from('repairs').delete().eq('id', pendingDeleteId);
     document.getElementById('deleteModal').classList.remove('show');
     if(error){ showToast('Error: ' + error.message); pendingDeleteId = null; return; }
