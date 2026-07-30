@@ -449,7 +449,7 @@
   <div class="card" id="repairsCard">
     <h2>Repairs</h2>
 
-    <button id="scanCollectBtn" style="width:100%;padding:12px;margin-bottom:12px;background:#1d8a3f;color:#fff;border:none;border-radius:6px;font-size:0.95rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+    <button id="scanCollectBtn" style="display:none;width:100%;padding:12px;margin-bottom:12px;background:#1d8a3f;color:#fff;border:none;border-radius:6px;font-size:0.95rem;font-weight:600;cursor:pointer;align-items:center;justify-content:center;gap:8px;">
       📷 Scan signed slip to collect
     </button>
     <input type="file" id="scanCollectInput" accept="image/*" capture="environment" style="display:none;">
@@ -1278,6 +1278,19 @@
       .replace(/O/g,'0').replace(/I/g,'1').replace(/S/g,'5')
       .replace(/B/g,'8').replace(/Z/g,'2').replace(/G/g,'6');
   }
+
+  // The slip scanner only makes sense on a phone (needs a rear camera), so
+  // only reveal the button on mobile/touch devices — keep it hidden on desktop.
+  (function revealScanIfMobile(){
+    const ua = navigator.userAgent || '';
+    const isMobileUA = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+    const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    // Treat iPads reporting as desktop (maxTouchPoints) as mobile too.
+    if(isMobileUA || (isTouch && Math.min(window.screen.width, window.screen.height) < 900)){
+      const btn = document.getElementById('scanCollectBtn');
+      if(btn) btn.style.display = 'flex';
+    }
+  })();
 
   document.getElementById('scanCollectBtn').addEventListener('click', () => {
     if(typeof Tesseract === 'undefined'){
