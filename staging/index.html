@@ -1324,14 +1324,14 @@
       const text = (data && data.text) ? data.text : '';
 
       // Best-effort extraction of an O10S-style number for reference/storage.
-      // (The photo is the real record; this is just a human-readable label.)
+      // Job numbers are always O10S + exactly 6 digits, so we match exactly six
+      // and stop — otherwise the reader can grab a digit from the date/page
+      // number printed right next to it. (The photo is the real record; this is
+      // just a human-readable label.)
       scanReadNumber = '';
-      const m = text.toUpperCase().replace(/\s+/g,'').match(/O?10S\d{4,8}/);
-      if(m) scanReadNumber = m[0];
-      else {
-        const digits = text.replace(/\D+/g,'');
-        if(digits.length >= 5) scanReadNumber = 'O10S' + digits.slice(-6);
-      }
+      const compact = text.toUpperCase().replace(/\s+/g,'');
+      const m = compact.match(/O?10S(\d{6})/);
+      if(m) scanReadNumber = 'O10S' + m[1];
 
       if(!text.trim()){
         showScanError('Couldn\u2019t read a number from that photo. If this job hasn\u2019t been logged yet, you can save the slip to deal with later, or use search to collect manually.', true);
