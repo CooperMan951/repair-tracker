@@ -1792,15 +1792,44 @@
     if(error){ showToast('Load error: ' + error.message); return; }
     repairs = data;
     await renderTable();
-    // If the admin Stats modal is currently open, refresh its figures live
     if(document.getElementById('statsModal').classList.contains('show')){
       renderStats();
     }
   }
 
-  sb.channel('repairs-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, async () => {
+  // Apply a single realtime change to the local list WITHOUT re-downloading
+  // the whole table. This is the main egress saver: previously every change
+  // by anyone caused all logged-in browsers to re-fetch all rows. Now we just
+  // patch the one affected row from the event payload (which we already
+  // received for free over the realtime channel).
+  async function applyRealtimeChange(payload){
+    try {
+      if(payload.eventType === 'INSERT'){
+        if(!repairs.some(r => r.id === payload.new.id)){
+          repairs.unshift(payload.new);
+        }
+      } else if(payload.eventType === 'UPDATE'){
+        const idx = repairs.findIndex(r => r.id === payload.new.id);
+        if(idx !== -1) repairs[idx] = payload.new;
+        else repairs.unshift(payload.new);
+      } else if(payload.eventType === 'DELETE'){
+        repairs = repairs.filter(r => r.id !== payload.old.id);
+      }
+      // Keep newest-first ordering consistent with the initial load
+      repairs.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      await renderTable();
+      if(document.getElementById('statsModal').classList.contains('show')){
+        renderStats();
+      }
+    } catch(e){
+      // If anything unexpected happens, fall back to a full reload
       await loadRepairs();
+    }
+  }
+
+  sb.channel('repairs-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, async (payload) => {
+      await applyRealtimeChange(payload);
     })
     .subscribe((status) => {
       const el = document.getElementById('connStatus');
