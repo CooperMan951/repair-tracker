@@ -1320,26 +1320,42 @@
       reader.onload = e => { img.src = e.target.result; };
       reader.onerror = reject;
       img.onload = () => {
-        const cropW = Math.round(img.width * 0.6);
-        const cropH = Math.round(img.height * 0.35);
+        // Focus on the top-right area where the number always sits. A tighter
+        // region means the number fills more of the frame, so we can keep the
+        // output small — which is what stops phones running out of memory and
+        // crashing during OCR.
+        const cropW = Math.round(img.width * 0.55);
+        const cropH = Math.round(img.height * 0.25);
         const sx = img.width - cropW;
-        // Upscale the crop a little to help the reader with small print
-        const scale = 2;
+        const sy = 0;
+        // Hard cap the output width so the OCR canvas is always small
+        // (~1200px wide max), regardless of how many megapixels the phone
+        // camera produced. Never upscale beyond the source.
+        const TARGET_W = 1200;
+        const scale = Math.min(1, TARGET_W / cropW);
+        const outW = Math.max(1, Math.round(cropW * scale));
+        const outH = Math.max(1, Math.round(cropH * scale));
         const canvas = document.createElement('canvas');
-        canvas.width = cropW * scale;
-        canvas.height = cropH * scale;
+        canvas.width = outW;
+        canvas.height = outH;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, sx, 0, cropW, cropH, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/png'));
+        ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, outW, outH);
+        // Return the canvas itself — Tesseract reads it directly, avoiding a
+        // large base64 image string in memory.
+        resolve(canvas);
       };
       img.onerror = reject;
       reader.readAsDataURL(file);
     });
   }
 
+  let scanInProgress = false;
+
   document.getElementById('scanCollectInput').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if(!file) return;
+    if(scanInProgress) return; // don't let a second scan pile on memory
+    scanInProgress = true;
     scanPhotoFile = file;
     scanMatchedId = null;
 
@@ -1349,11 +1365,14 @@
     document.getElementById('scanCloseOnly').style.display = 'none';
     document.getElementById('scanModal').classList.add('show');
 
+    let cropped = null;
     try {
-      const cropped = await cropTopRight(file);
+      cropped = await cropTopRight(file);
       const worker = await getOcrWorker();
       const { data } = await worker.recognize(cropped);
       const text = (data && data.text) ? data.text : '';
+      // Free the crop canvas memory as soon as OCR is done
+      if(cropped){ cropped.width = 0; cropped.height = 0; cropped = null; }
 
       // Best-effort extraction of an O10S-style number for reference/storage.
       // Job numbers are always O10S + exactly 6 digits, so we match exactly six
@@ -1410,7 +1429,10 @@
       document.getElementById('scanButtons').style.display = 'flex';
       document.getElementById('scanCloseOnly').style.display = 'none';
     } catch(err){
-      showScanError('Something went wrong reading the photo. Please try again, or use search to collect manually.');
+      showScanError('Something went wrong reading the photo. Please try a clearer, closer shot, or use search to collect manually.', true);
+    } finally {
+      if(cropped){ try { cropped.width = 0; cropped.height = 0; } catch(e){} cropped = null; }
+      scanInProgress = false;
     }
   });
 
