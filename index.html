@@ -865,12 +865,13 @@
     }
 
     // Confirm data arrived
-    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loaded ' + data.length + ' slip(s), displaying…</p>';
+    body.innerHTML = '<p style="font-size:0.85rem;">CP1: loaded ' + data.length + ', sorting…</p>';
 
     try {
       data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      body.innerHTML = '<p style="font-size:0.85rem;">CP2: sorted, building rows…</p>';
+
       let h = '';
-      // Index loop (not for-of) — proven reliable in this environment.
       for(let i = 0; i < data.length; i++){
         const u = data[i] || {};
         const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
@@ -892,14 +893,14 @@
           + '<button class="unmatched-remove" data-id="' + pid + '" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>'
           + '</div></div>';
       }
+      body.innerHTML = '<p style="font-size:0.85rem;">CP3: built ' + h.length + ' chars, injecting…</p>';
       body.innerHTML = h;
     } catch(buildErr){
-      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t display: ' +
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">CP-ERR: ' +
         escapeHtml(String((buildErr && buildErr.message) || buildErr)) + '</p>';
       return;
     }
 
-    // Wire up the buttons separately — if this fails, the list is still shown.
     try {
       wireViewFileLinks();
       const removeBtns = document.querySelectorAll('.unmatched-remove');
@@ -912,7 +913,7 @@
           loadUnmatched();
         });
       }
-    } catch(wireErr){ /* list is already visible; wiring is non-critical */ }
+    } catch(wireErr){ /* non-critical */ }
   }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {
