@@ -869,7 +869,11 @@
 
     try {
       data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-      body.innerHTML = '<p style="font-size:0.85rem;">CP2: sorted, building rows…</p>';
+      body.innerHTML = '<p style="font-size:0.85rem;">CP2a: testing date formatting…</p>';
+      const testDate = data[0].created_at ? new Date(data[0].created_at).toLocaleString() : '(none)';
+      body.innerHTML = '<p style="font-size:0.85rem;">CP2b: date OK ('+ testDate +'). Testing escapeHtml…</p>';
+      const testEsc = escapeHtml(data[0].read_number || 'x');
+      body.innerHTML = '<p style="font-size:0.85rem;">CP2c: escapeHtml OK ('+ testEsc +'). Building full loop…</p>';
 
       let h = '';
       for(let i = 0; i < data.length; i++){
