@@ -842,18 +842,22 @@
 
   async function loadUnmatched(){
     const body = document.getElementById('unmatchedBody');
-    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading…</p>';
+    if(!body) return;
+    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading… (contacting server)</p>';
 
     let data = null, error = null;
     try {
-      const res = await sb.from('unmatched_collections').select('*').eq('handled', false);
+      const controller = new AbortController();
+      const to = setTimeout(() => controller.abort(), 10000);
+      const res = await sb.from('unmatched_collections').select('*').eq('handled', false).abortSignal(controller.signal);
+      clearTimeout(to);
       data = res.data; error = res.error;
     } catch(e){
-      error = { message: (e && e.message) ? e.message : 'connection problem' };
+      error = { message: (e && e.message) ? e.message : 'request failed or timed out' };
     }
 
     if(error){
-      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load: ' + escapeHtml(error.message) +
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load: ' + escapeHtml(String(error.message||'unknown')) +
         '</p><button id="retryUnmatched" style="margin-top:8px;padding:6px 14px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;cursor:pointer;">Try again</button>';
       const rb = document.getElementById('retryUnmatched');
       if(rb) rb.addEventListener('click', loadUnmatched);
@@ -864,33 +868,46 @@
       return;
     }
 
-    // Sort newest-first in JS (avoids relying on a server-side order clause)
-    data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    // Confirm on screen that data arrived, before attempting to display it.
+    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loaded ' + data.length + ' slip(s), displaying…</p>';
 
-    let h = '';
-    for(const u of data){
-      const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
-      h += `<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">
-        <div style="font-weight:600;">${u.read_number ? escapeHtml(u.read_number) : '(number not read)'}</div>
-        <div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">
-          ${escapeHtml(u.branch||'—')} &middot; ${escapeHtml(u.scanned_by||'')} &middot; ${escapeHtml(when)}
-        </div>
-        <div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-          ${u.photo_url ? `<a href="#" class="view-file-link" data-file-path="${escapeHtml(u.photo_url)}" data-bucket="unmatched-slips" data-viewer-title="${escapeHtml('Unmatched slip ' + (u.read_number||''))}" style="font-size:0.8rem;color:var(--accent,#1d4f8a);text-decoration:underline;">📷 View slip</a>` : ''}
-          <button class="unmatched-remove" data-id="${u.id}" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>
-        </div>
-      </div>`;
-    }
-    body.innerHTML = h;
-    wireViewFileLinks();
-    document.querySelectorAll('.unmatched-remove').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true; btn.textContent = 'Removing…';
-        const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
-        if(delErr){ btn.disabled=false; btn.textContent='Remove'; showToast('Error: '+delErr.message); return; }
-        loadUnmatched();
+    try {
+      data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      let h = '';
+      for(const u of data){
+        const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
+        const rn = u.read_number ? escapeHtml(u.read_number) : '(number not read)';
+        const br = escapeHtml(u.branch || '—');
+        const by = escapeHtml(u.scanned_by || '');
+        const wh = escapeHtml(when);
+        const pid = escapeHtml(String(u.id || ''));
+        const ppath = escapeHtml(u.photo_url || '');
+        const ptitle = escapeHtml('Unmatched slip ' + (u.read_number || ''));
+        const photoLink = u.photo_url
+          ? '<a href="#" class="view-file-link" data-file-path="' + ppath + '" data-bucket="unmatched-slips" data-viewer-title="' + ptitle + '" style="font-size:0.8rem;color:var(--accent,#1d4f8a);text-decoration:underline;">📷 View slip</a>'
+          : '';
+        h += '<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">'
+          + '<div style="font-weight:600;">' + rn + '</div>'
+          + '<div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">' + br + ' &middot; ' + by + ' &middot; ' + wh + '</div>'
+          + '<div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">'
+          + photoLink
+          + '<button class="unmatched-remove" data-id="' + pid + '" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>'
+          + '</div></div>';
+      }
+      body.innerHTML = h;
+      wireViewFileLinks();
+      document.querySelectorAll('.unmatched-remove').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true; btn.textContent = 'Removing…';
+          const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
+          if(delErr){ btn.disabled=false; btn.textContent='Remove'; showToast('Error: '+delErr.message); return; }
+          loadUnmatched();
+        });
       });
-    });
+    } catch(renderErr){
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Loaded ' + data.length +
+        ' slip(s) but couldn\u2019t display them: ' + escapeHtml(String((renderErr && renderErr.message) || renderErr)) + '</p>';
+    }
   }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {
