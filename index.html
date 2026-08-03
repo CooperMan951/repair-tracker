@@ -839,7 +839,7 @@
   async function loadUnmatched(){
     const body = document.getElementById('unmatchedBody');
     if(!body) return;
-    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading… (contacting server)</p>';
+    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading…</p>';
 
     let data = null, error = null;
     try {
@@ -864,17 +864,8 @@
       return;
     }
 
-    // Confirm data arrived
-    body.innerHTML = '<p style="font-size:0.85rem;">CP1: loaded ' + data.length + ', sorting…</p>';
-
     try {
       data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-      body.innerHTML = '<p style="font-size:0.85rem;">CP2a: testing date formatting…</p>';
-      const testDate = data[0].created_at ? new Date(data[0].created_at).toLocaleString() : '(none)';
-      body.innerHTML = '<p style="font-size:0.85rem;">CP2b: date OK ('+ testDate +'). Testing escapeHtml…</p>';
-      const testEsc = escapeHtml(data[0].read_number || 'x');
-      body.innerHTML = '<p style="font-size:0.85rem;">CP2c: escapeHtml OK ('+ testEsc +'). Building full loop…</p>';
-
       let h = '';
       for(let i = 0; i < data.length; i++){
         const u = data[i] || {};
@@ -897,10 +888,9 @@
           + '<button class="unmatched-remove" data-id="' + pid + '" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>'
           + '</div></div>';
       }
-      body.innerHTML = '<p style="font-size:0.85rem;">CP3: built ' + h.length + ' chars, injecting…</p>';
       body.innerHTML = h;
     } catch(buildErr){
-      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">CP-ERR: ' +
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t display: ' +
         escapeHtml(String((buildErr && buildErr.message) || buildErr)) + '</p>';
       return;
     }
@@ -917,7 +907,7 @@
           loadUnmatched();
         });
       }
-    } catch(wireErr){ /* non-critical */ }
+    } catch(wireErr){ /* list already visible; wiring is non-critical */ }
   }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {
@@ -2184,9 +2174,13 @@
   }
 
   function escapeHtml(str){
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    // Pure string escaping — no DOM element created, so it can never stall.
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   let loadRequestSeq = 0;

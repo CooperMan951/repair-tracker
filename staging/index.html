@@ -843,7 +843,7 @@
   async function loadUnmatched(){
     const body = document.getElementById('unmatchedBody');
     if(!body) return;
-    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading… (contacting server)</p>';
+    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading…</p>';
 
     let data = null, error = null;
     try {
@@ -868,13 +868,9 @@
       return;
     }
 
-    // Confirm data arrived
-    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loaded ' + data.length + ' slip(s), displaying…</p>';
-
     try {
       data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
       let h = '';
-      // Index loop (not for-of) — proven reliable in this environment.
       for(let i = 0; i < data.length; i++){
         const u = data[i] || {};
         const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
@@ -903,7 +899,6 @@
       return;
     }
 
-    // Wire up the buttons separately — if this fails, the list is still shown.
     try {
       wireViewFileLinks();
       const removeBtns = document.querySelectorAll('.unmatched-remove');
@@ -916,7 +911,7 @@
           loadUnmatched();
         });
       }
-    } catch(wireErr){ /* list is already visible; wiring is non-critical */ }
+    } catch(wireErr){ /* list already visible; wiring is non-critical */ }
   }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {
@@ -2183,9 +2178,13 @@
   }
 
   function escapeHtml(str){
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    // Pure string escaping — no DOM element created, so it can never stall.
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   let loadRequestSeq = 0;
