@@ -868,13 +868,15 @@
       return;
     }
 
-    // Confirm on screen that data arrived, before attempting to display it.
+    // Confirm data arrived
     body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loaded ' + data.length + ' slip(s), displaying…</p>';
 
     try {
       data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
       let h = '';
-      for(const u of data){
+      // Index loop (not for-of) — proven reliable in this environment.
+      for(let i = 0; i < data.length; i++){
+        const u = data[i] || {};
         const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
         const rn = u.read_number ? escapeHtml(u.read_number) : '(number not read)';
         const br = escapeHtml(u.branch || '—');
@@ -895,19 +897,26 @@
           + '</div></div>';
       }
       body.innerHTML = h;
+    } catch(buildErr){
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t display: ' +
+        escapeHtml(String((buildErr && buildErr.message) || buildErr)) + '</p>';
+      return;
+    }
+
+    // Wire up the buttons separately — if this fails, the list is still shown.
+    try {
       wireViewFileLinks();
-      document.querySelectorAll('.unmatched-remove').forEach(btn => {
-        btn.addEventListener('click', async () => {
+      const removeBtns = document.querySelectorAll('.unmatched-remove');
+      for(let i = 0; i < removeBtns.length; i++){
+        removeBtns[i].addEventListener('click', async (ev) => {
+          const btn = ev.currentTarget;
           btn.disabled = true; btn.textContent = 'Removing…';
           const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
           if(delErr){ btn.disabled=false; btn.textContent='Remove'; showToast('Error: '+delErr.message); return; }
           loadUnmatched();
         });
-      });
-    } catch(renderErr){
-      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Loaded ' + data.length +
-        ' slip(s) but couldn\u2019t display them: ' + escapeHtml(String((renderErr && renderErr.message) || renderErr)) + '</p>';
-    }
+      }
+    } catch(wireErr){ /* list is already visible; wiring is non-critical */ }
   }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {

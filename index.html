@@ -864,22 +864,55 @@
       return;
     }
 
-    // Confirm on screen that data arrived, before attempting to display it.
+    // Confirm data arrived
     body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loaded ' + data.length + ' slip(s), displaying…</p>';
 
-    // MINIMAL DIAGNOSTIC RENDER — isolate whether the display step itself works.
     try {
-      let names = [];
+      data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      let h = '';
+      // Index loop (not for-of) — proven reliable in this environment.
       for(let i = 0; i < data.length; i++){
-        const u = data[i];
-        names.push((u && u.read_number) ? u.read_number : '(no number)');
+        const u = data[i] || {};
+        const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
+        const rn = u.read_number ? escapeHtml(u.read_number) : '(number not read)';
+        const br = escapeHtml(u.branch || '—');
+        const by = escapeHtml(u.scanned_by || '');
+        const wh = escapeHtml(when);
+        const pid = escapeHtml(String(u.id || ''));
+        const ppath = escapeHtml(u.photo_url || '');
+        const ptitle = escapeHtml('Unmatched slip ' + (u.read_number || ''));
+        const photoLink = u.photo_url
+          ? '<a href="#" class="view-file-link" data-file-path="' + ppath + '" data-bucket="unmatched-slips" data-viewer-title="' + ptitle + '" style="font-size:0.8rem;color:var(--accent,#1d4f8a);text-decoration:underline;">📷 View slip</a>'
+          : '';
+        h += '<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">'
+          + '<div style="font-weight:600;">' + rn + '</div>'
+          + '<div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">' + br + ' &middot; ' + by + ' &middot; ' + wh + '</div>'
+          + '<div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">'
+          + photoLink
+          + '<button class="unmatched-remove" data-id="' + pid + '" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>'
+          + '</div></div>';
       }
-      body.innerHTML = '<p style="font-size:0.85rem;">DIAGNOSTIC OK — ' + data.length +
-        ' slips: ' + names.join(', ') + '</p>';
-    } catch(renderErr){
-      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Render failed: ' +
-        escapeHtml(String((renderErr && renderErr.message) || renderErr)) + '</p>';
+      body.innerHTML = h;
+    } catch(buildErr){
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t display: ' +
+        escapeHtml(String((buildErr && buildErr.message) || buildErr)) + '</p>';
+      return;
     }
+
+    // Wire up the buttons separately — if this fails, the list is still shown.
+    try {
+      wireViewFileLinks();
+      const removeBtns = document.querySelectorAll('.unmatched-remove');
+      for(let i = 0; i < removeBtns.length; i++){
+        removeBtns[i].addEventListener('click', async (ev) => {
+          const btn = ev.currentTarget;
+          btn.disabled = true; btn.textContent = 'Removing…';
+          const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
+          if(delErr){ btn.disabled=false; btn.textContent='Remove'; showToast('Error: '+delErr.message); return; }
+          loadUnmatched();
+        });
+      }
+    } catch(wireErr){ /* list is already visible; wiring is non-critical */ }
   }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {
