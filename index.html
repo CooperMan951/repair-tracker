@@ -839,7 +839,7 @@
   async function loadUnmatched(){
     const body = document.getElementById('unmatchedBody');
     if(!body) return;
-    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading… (build 4)</p>';
+    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading… (build 5)</p>';
 
     let data = null, error = null;
     try {
@@ -848,6 +848,9 @@
     } catch(e){
       error = { message: (e && e.message) ? e.message : 'connection problem' };
     }
+
+    body.innerHTML = '<p style="font-size:0.85rem;">QDONE(b5): err=' + (error ? 'yes' : 'no') +
+      ', rows=' + (data ? data.length : 'null') + '</p>';
 
     if(error){
       body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load: ' + escapeHtml(String(error.message||'unknown')) +
