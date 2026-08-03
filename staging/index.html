@@ -843,14 +843,15 @@
   async function loadUnmatched(){
     const body = document.getElementById('unmatchedBody');
     if(!body) return;
-    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading…</p>';
+    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading… (build 3)</p>';
 
     let data = null, error = null;
     try {
-      const controller = new AbortController();
-      const to = setTimeout(() => controller.abort(), 10000);
-      const res = await sb.from('unmatched_collections').select('*').eq('handled', false).abortSignal(controller.signal);
-      clearTimeout(to);
+      // Guaranteed timeout: rejects after 10s no matter what, so this can
+      // never sit on "Loading…" forever.
+      const queryP = sb.from('unmatched_collections').select('*').eq('handled', false);
+      const timeoutP = new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out after 10s')), 10000));
+      const res = await Promise.race([queryP, timeoutP]);
       data = res.data; error = res.error;
     } catch(e){
       error = { message: (e && e.message) ? e.message : 'request failed or timed out' };
