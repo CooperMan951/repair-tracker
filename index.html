@@ -1334,40 +1334,46 @@
 
   // Crop to the top-right region (where the number always sits) before OCR —
   // faster and far more accurate than reading the whole slip.
-  function cropTopRight(file){
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const reader = new FileReader();
-      reader.onload = e => { img.src = e.target.result; };
-      reader.onerror = reject;
-      img.onload = () => {
-        // Focus on the top-right area where the number always sits. A tighter
-        // region means the number fills more of the frame, so we can keep the
-        // output small — which is what stops phones running out of memory and
-        // crashing during OCR.
-        const cropW = Math.round(img.width * 0.55);
-        const cropH = Math.round(img.height * 0.25);
-        const sx = img.width - cropW;
-        const sy = 0;
-        // Hard cap the output width so the OCR canvas is always small
-        // (~1200px wide max), regardless of how many megapixels the phone
-        // camera produced. Never upscale beyond the source.
-        const TARGET_W = 1200;
-        const scale = Math.min(1, TARGET_W / cropW);
-        const outW = Math.max(1, Math.round(cropW * scale));
-        const outH = Math.max(1, Math.round(cropH * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = outW;
-        canvas.height = outH;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, outW, outH);
-        // Return the canvas itself — Tesseract reads it directly, avoiding a
-        // large base64 image string in memory.
-        resolve(canvas);
-      };
-      img.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+  async function cropTopRight(file){
+    const TARGET_W = 1100; // downscaled working width — plenty for reading the number
+    let drawable = null, srcW = 0, srcH = 0, isBitmap = false;
+
+    // Preferred path: decode the photo already downscaled. This never holds
+    // the full-resolution bitmap in memory, which is what was crashing phones.
+    if(typeof createImageBitmap === 'function'){
+      try {
+        drawable = await createImageBitmap(file, { resizeWidth: TARGET_W, resizeQuality: 'low' });
+        srcW = drawable.width; srcH = drawable.height; isBitmap = true;
+      } catch(e){ drawable = null; }
+    }
+
+    // Fallback: load via an object URL (no giant base64 string) and downscale
+    // ourselves. Full decode happens here, but only on browsers lacking the
+    // efficient path above.
+    if(!drawable){
+      drawable = await new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed')); };
+        img.src = url;
+      });
+      srcW = drawable.naturalWidth || drawable.width;
+      srcH = drawable.naturalHeight || drawable.height;
+    }
+
+    // Crop the top-right region (where the number always is) from the
+    // already-downscaled image.
+    const cropW = Math.round(srcW * 0.55);
+    const cropH = Math.round(srcH * 0.25);
+    const sx = srcW - cropW;
+    const canvas = document.createElement('canvas');
+    canvas.width = cropW;
+    canvas.height = cropH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(drawable, sx, 0, cropW, cropH, 0, 0, cropW, cropH);
+    if(isBitmap && drawable.close) drawable.close(); // free the bitmap immediately
+    return canvas;
   }
 
   let scanInProgress = false;
