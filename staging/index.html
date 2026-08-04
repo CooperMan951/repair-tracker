@@ -474,7 +474,7 @@
 
       <table id="repairsTable">
         <thead>
-          <tr>
+          <tr id="repairsHeadRow">
             <th>To Branch</th>
             <th>Logged By</th>
             <th>Job #</th>
@@ -558,7 +558,7 @@
     <canvas id="signaturePad" style="width:100%;height:140px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
     <button type="button" id="clearSignatureBtn" style="margin-top:6px;padding:5px 12px;font-size:0.78rem;background:transparent;border:1px solid var(--gray-border);border-radius:5px;cursor:pointer;color:var(--gray-text);">Clear signature</button>
 
-    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+    <div id="courierCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="courierCheck" style="width:auto;">
       <label for="courierCheck" style="margin:0;">Courier delivery?</label>
     </div>
@@ -571,7 +571,7 @@
       <input type="file" id="waybillFile" accept="image/*,.pdf">
     </div>
 
-    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+    <div id="loanReturnCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="loanReturnCheck" style="width:auto;">
       <label for="loanReturnCheck" style="margin:0;">Loan unit return?</label>
     </div>
@@ -752,22 +752,57 @@
   };
 
   const ADMIN_EMAILS = ['arno.cooper@orms.co.za', 'bronwyn.jefferys@orms.co.za'];
+  // Collection-station logins (e.g. the counter iPad): a restricted, collect-only view.
+  const COLLECTION_EMAILS = ['collections@orms.co.za'];
+  let collectionMode = false;
 
   function showLoggedIn(email){
+    collectionMode = COLLECTION_EMAILS.includes(email.toLowerCase());
+
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
-    document.getElementById('adminBtn').style.display = 'inline-block';
-    document.getElementById('changePwBtn').style.display = 'inline-block';
-    document.getElementById('statsBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
-    document.getElementById('unmatchedBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
     document.getElementById('userEmailLabel').textContent = email;
 
-    // Set default branch filter based on who logged in
+    // Admin/management buttons — never for the collection station.
+    const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+    document.getElementById('adminBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('changePwBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('statsBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('unmatchedBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
+
+    if(collectionMode){
+      // Restricted counter view: only collect received repairs.
+      // Hide job creation entirely.
+      const logCard = document.getElementById('logRepairCard');
+      if(logCard) logCard.style.display = 'none';
+      // Hide the scan-to-collect button (collection is by search here).
+      const scanBtn = document.getElementById('scanCollectBtn');
+      if(scanBtn) scanBtn.style.display = 'none';
+      // Section toggle: only "Active" — hide Pending and Collected.
+      const toggle = document.getElementById('sectionToggle');
+      if(toggle){
+        toggle.querySelectorAll('.filter-btn').forEach(b => {
+          if(b.dataset.section === 'active'){ b.classList.add('active'); b.style.display = ''; }
+          else { b.classList.remove('active'); b.style.display = 'none'; }
+        });
+      }
+      activeSection = 'active';
+      // Restrict the active-table header to just Job # and Name.
+      const headRow = document.getElementById('repairsHeadRow');
+      if(headRow) headRow.innerHTML = '<th>Job #</th><th>Name</th><th></th>';
+      // Give the collection station a clear title.
+      const repairsHeading = document.querySelector('#repairsCard h2');
+      if(repairsHeading) repairsHeading.textContent = 'Collections';
+      activeFilter = 'All';
+      startApp();
+      return;
+    }
+
+    // ---- Normal (full) view ----
     const defaultBranch = USER_BRANCH_MAP[email.toLowerCase()] || 'All';
     activeFilter = defaultBranch;
 
-    // For Bellville and Somerset, show Repairs first and Log a Repair at the bottom
     if(defaultBranch === 'Bellville' || defaultBranch === 'Somerset'){
       const container = document.querySelector('.container');
       const repairsCard = document.getElementById('repairsCard');
@@ -1569,6 +1604,11 @@
     document.getElementById('loanReturnFields').style.display = 'none';
     document.getElementById('loanReturnBranch').value = 'Cape Town';
     document.getElementById('loanReturnItem').value = '';
+    // At the collection station, keep the modal simple: photo + signature only.
+    const courierRow = document.getElementById('courierCheckRow');
+    const loanRow = document.getElementById('loanReturnCheckRow');
+    if(courierRow) courierRow.style.display = collectionMode ? 'none' : 'flex';
+    if(loanRow) loanRow.style.display = collectionMode ? 'none' : 'flex';
     document.getElementById('collectModal').classList.add('show');
     // Set up the signature pad once the modal is visible (canvas needs a
     // layout size before we can size its drawing surface correctly).
@@ -1953,6 +1993,17 @@
 
       activeRows.forEach(r => {
         const tr = document.createElement('tr');
+
+        // Collection-station view: only Job # + Client name + a Collect button.
+        if(collectionMode){
+          tr.innerHTML =
+            '<td data-label="Job #">' + escapeHtml(r.job_number) + '</td>'
+            + '<td data-label="Name">' + escapeHtml(r.name) + '</td>'
+            + '<td data-label=""><button class="collect-btn" data-id="' + r.id + '" data-action="collect">Mark Collected</button></td>';
+          body.appendChild(tr);
+          return;
+        }
+
         if(r.is_loan_return) tr.classList.add('loan-row');
         const overdue = isOverdue(r);
         let statusHtml;
