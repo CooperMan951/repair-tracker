@@ -551,7 +551,18 @@
   <div class="modal">
     <h3>Confirm Collection</h3>
     <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
-    <label for="collectPhotoInput">Photo (optional)</label>
+
+    <label for="collectedByInput">Collected by (name)</label>
+    <input type="text" id="collectedByInput" autocomplete="off" placeholder="Name of person collecting">
+
+    <label for="collectedBranchSelect" style="margin-top:10px;">Collecting at</label>
+    <select id="collectedBranchSelect" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:5px;font-size:0.9rem;margin-top:4px;">
+      <option value="Cape Town">Cape Town</option>
+      <option value="Bellville">Bellville</option>
+      <option value="Somerset">Somerset</option>
+    </select>
+
+    <label for="collectPhotoInput" style="margin-top:14px;display:block;">Photo (optional)</label>
     <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
 
     <label style="margin-top:14px;display:block;">Client signature (optional)</label>
@@ -1604,6 +1615,10 @@
     document.getElementById('loanReturnFields').style.display = 'none';
     document.getElementById('loanReturnBranch').value = 'Cape Town';
     document.getElementById('loanReturnItem').value = '';
+    // Reset the new "collected by" / "collecting at" fields.
+    document.getElementById('collectedByInput').value = '';
+    const rec = repairs.find(x => x.id === id);
+    document.getElementById('collectedBranchSelect').value = (rec && rec.branch) ? rec.branch : 'Cape Town';
     // At the collection station, keep the modal simple: photo + signature only.
     const courierRow = document.getElementById('courierCheckRow');
     const loanRow = document.getElementById('loanReturnCheckRow');
@@ -1724,6 +1739,8 @@
     const loanReturn = document.getElementById('loanReturnCheck').checked;
     const loanReturnBranch = document.getElementById('loanReturnBranch').value;
     const loanReturnItem = document.getElementById('loanReturnItem').value.trim();
+    const collectedBy = document.getElementById('collectedByInput').value.trim();
+    const collectedBranch = document.getElementById('collectedBranchSelect').value;
 
     if(isCourier && !courierAddress){ showToast('Please enter the courier address'); return; }
     if(loanReturn && !loanReturnItem){ showToast('Please enter the loan unit item'); return; }
@@ -1766,7 +1783,7 @@
     let signatureUrl = null;
     const sigRecord = repairs.find(x => x.id === pendingCollectId);
     const signatureBlob = await getSignatureBlob({
-      name: sigRecord ? sigRecord.name : '',
+      name: collectedBy || (sigRecord ? sigRecord.name : ''),
       job: sigRecord ? sigRecord.job_number : ''
     });
     if(signatureBlob){
@@ -1789,6 +1806,8 @@
       collected_at: new Date().toISOString(),
       collected_photo_url: photoUrl,
       signature_url: signatureUrl,
+      collected_by: collectedBy || null,
+      collected_branch: collectedBranch || null,
       is_courier: isCourier,
       courier_address: isCourier ? courierAddress : null,
       waybill_url: waybillUrl,
@@ -1836,6 +1855,8 @@
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
       r.signature_url = signatureUrl;
+      r.collected_by = collectedBy || null;
+      r.collected_branch = collectedBranch || null;
       r.is_courier = isCourier;
       r.courier_address = isCourier ? courierAddress : null;
       r.waybill_url = waybillUrl;
@@ -2054,9 +2075,10 @@
 
     // COLLECTED section
     let collectedRows = allRows.filter(r => r.collected);
-    // Apply branch filter (independent of the active-tab branch filter)
+    // Filter by the branch where the item was collected (falls back to the
+    // repair's branch for older records collected before this was tracked).
     if(collectedFilter !== 'All'){
-      collectedRows = collectedRows.filter(r => r.branch === collectedFilter);
+      collectedRows = collectedRows.filter(r => (r.collected_branch || r.branch) === collectedFilter);
     }
 
     const cBody = document.getElementById('collectedBody');
@@ -2098,7 +2120,7 @@
           <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
-          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}${sigHtml}</td>
+          <td data-label="Collected"><span class="badge collected">Collected</span>${r.collected_branch ? `<br><span class="received-info">at ${escapeHtml(r.collected_branch)}${r.collected_by ? ' by ' + escapeHtml(r.collected_by) : ''}</span>` : (r.collected_by ? `<br><span class="received-info">by ${escapeHtml(r.collected_by)}</span>` : '')}<br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}${sigHtml}</td>
           <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
         `;
         cBody.appendChild(tr);
