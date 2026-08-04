@@ -470,7 +470,7 @@
 
       <table id="repairsTable">
         <thead>
-          <tr>
+          <tr id="repairsHeadRow">
             <th>To Branch</th>
             <th>Logged By</th>
             <th>Job #</th>
@@ -547,14 +547,25 @@
   <div class="modal">
     <h3>Confirm Collection</h3>
     <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
-    <label for="collectPhotoInput">Photo (optional)</label>
+
+    <label for="collectedByInput">Collected by (name)</label>
+    <input type="text" id="collectedByInput" autocomplete="off" placeholder="Name of person collecting">
+
+    <label for="collectedBranchSelect" style="margin-top:10px;">Collecting at</label>
+    <select id="collectedBranchSelect" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:5px;font-size:0.9rem;margin-top:4px;">
+      <option value="Cape Town">Cape Town</option>
+      <option value="Bellville">Bellville</option>
+      <option value="Somerset">Somerset</option>
+    </select>
+
+    <label for="collectPhotoInput" style="margin-top:14px;display:block;">Photo (optional)</label>
     <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
 
     <label style="margin-top:14px;display:block;">Client signature (optional)</label>
     <canvas id="signaturePad" style="width:100%;height:140px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
     <button type="button" id="clearSignatureBtn" style="margin-top:6px;padding:5px 12px;font-size:0.78rem;background:transparent;border:1px solid var(--gray-border);border-radius:5px;cursor:pointer;color:var(--gray-text);">Clear signature</button>
 
-    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+    <div id="courierCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="courierCheck" style="width:auto;">
       <label for="courierCheck" style="margin:0;">Courier delivery?</label>
     </div>
@@ -567,7 +578,7 @@
       <input type="file" id="waybillFile" accept="image/*,.pdf">
     </div>
 
-    <div style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+    <div id="loanReturnCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="loanReturnCheck" style="width:auto;">
       <label for="loanReturnCheck" style="margin:0;">Loan unit return?</label>
     </div>
@@ -748,22 +759,57 @@
   };
 
   const ADMIN_EMAILS = ['arno.cooper@orms.co.za', 'bronwyn.jefferys@orms.co.za'];
+  // Collection-station logins (e.g. the counter iPad): a restricted, collect-only view.
+  const COLLECTION_EMAILS = ['collections@orms.co.za'];
+  let collectionMode = false;
 
   function showLoggedIn(email){
+    collectionMode = COLLECTION_EMAILS.includes(email.toLowerCase());
+
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
-    document.getElementById('adminBtn').style.display = 'inline-block';
-    document.getElementById('changePwBtn').style.display = 'inline-block';
-    document.getElementById('statsBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
-    document.getElementById('unmatchedBtn').style.display = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'inline-block' : 'none';
     document.getElementById('userEmailLabel').textContent = email;
 
-    // Set default branch filter based on who logged in
+    // Admin/management buttons — never for the collection station.
+    const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+    document.getElementById('adminBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('changePwBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('statsBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('unmatchedBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
+
+    if(collectionMode){
+      // Restricted counter view: only collect received repairs.
+      // Hide job creation entirely.
+      const logCard = document.getElementById('logRepairCard');
+      if(logCard) logCard.style.display = 'none';
+      // Hide the scan-to-collect button (collection is by search here).
+      const scanBtn = document.getElementById('scanCollectBtn');
+      if(scanBtn) scanBtn.style.display = 'none';
+      // Section toggle: only "Active" — hide Pending and Collected.
+      const toggle = document.getElementById('sectionToggle');
+      if(toggle){
+        toggle.querySelectorAll('.filter-btn').forEach(b => {
+          if(b.dataset.section === 'active'){ b.classList.add('active'); b.style.display = ''; }
+          else { b.classList.remove('active'); b.style.display = 'none'; }
+        });
+      }
+      activeSection = 'active';
+      // Restrict the active-table header to just Job # and Name.
+      const headRow = document.getElementById('repairsHeadRow');
+      if(headRow) headRow.innerHTML = '<th>Job #</th><th>Name</th><th></th>';
+      // Give the collection station a clear title.
+      const repairsHeading = document.querySelector('#repairsCard h2');
+      if(repairsHeading) repairsHeading.textContent = 'Collections';
+      activeFilter = 'All';
+      startApp();
+      return;
+    }
+
+    // ---- Normal (full) view ----
     const defaultBranch = USER_BRANCH_MAP[email.toLowerCase()] || 'All';
     activeFilter = defaultBranch;
 
-    // For Bellville and Somerset, show Repairs first and Log a Repair at the bottom
     if(defaultBranch === 'Bellville' || defaultBranch === 'Somerset'){
       const container = document.querySelector('.container');
       const repairsCard = document.getElementById('repairsCard');
@@ -1565,6 +1611,15 @@
     document.getElementById('loanReturnFields').style.display = 'none';
     document.getElementById('loanReturnBranch').value = 'Cape Town';
     document.getElementById('loanReturnItem').value = '';
+    // Reset the new "collected by" / "collecting at" fields.
+    document.getElementById('collectedByInput').value = '';
+    const rec = repairs.find(x => x.id === id);
+    document.getElementById('collectedBranchSelect').value = (rec && rec.branch) ? rec.branch : 'Cape Town';
+    // At the collection station, keep the modal simple: photo + signature only.
+    const courierRow = document.getElementById('courierCheckRow');
+    const loanRow = document.getElementById('loanReturnCheckRow');
+    if(courierRow) courierRow.style.display = collectionMode ? 'none' : 'flex';
+    if(loanRow) loanRow.style.display = collectionMode ? 'none' : 'flex';
     document.getElementById('collectModal').classList.add('show');
     // Set up the signature pad once the modal is visible (canvas needs a
     // layout size before we can size its drawing surface correctly).
@@ -1680,6 +1735,8 @@
     const loanReturn = document.getElementById('loanReturnCheck').checked;
     const loanReturnBranch = document.getElementById('loanReturnBranch').value;
     const loanReturnItem = document.getElementById('loanReturnItem').value.trim();
+    const collectedBy = document.getElementById('collectedByInput').value.trim();
+    const collectedBranch = document.getElementById('collectedBranchSelect').value;
 
     if(isCourier && !courierAddress){ showToast('Please enter the courier address'); return; }
     if(loanReturn && !loanReturnItem){ showToast('Please enter the loan unit item'); return; }
@@ -1722,7 +1779,7 @@
     let signatureUrl = null;
     const sigRecord = repairs.find(x => x.id === pendingCollectId);
     const signatureBlob = await getSignatureBlob({
-      name: sigRecord ? sigRecord.name : '',
+      name: collectedBy || (sigRecord ? sigRecord.name : ''),
       job: sigRecord ? sigRecord.job_number : ''
     });
     if(signatureBlob){
@@ -1745,6 +1802,8 @@
       collected_at: new Date().toISOString(),
       collected_photo_url: photoUrl,
       signature_url: signatureUrl,
+      collected_by: collectedBy || null,
+      collected_branch: collectedBranch || null,
       is_courier: isCourier,
       courier_address: isCourier ? courierAddress : null,
       waybill_url: waybillUrl,
@@ -1792,6 +1851,8 @@
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
       r.signature_url = signatureUrl;
+      r.collected_by = collectedBy || null;
+      r.collected_branch = collectedBranch || null;
       r.is_courier = isCourier;
       r.courier_address = isCourier ? courierAddress : null;
       r.waybill_url = waybillUrl;
@@ -1949,6 +2010,17 @@
 
       activeRows.forEach(r => {
         const tr = document.createElement('tr');
+
+        // Collection-station view: only Job # + Client name + a Collect button.
+        if(collectionMode){
+          tr.innerHTML =
+            '<td data-label="Job #">' + escapeHtml(r.job_number) + '</td>'
+            + '<td data-label="Name">' + escapeHtml(r.name) + '</td>'
+            + '<td data-label=""><button class="collect-btn" data-id="' + r.id + '" data-action="collect">Mark Collected</button></td>';
+          body.appendChild(tr);
+          return;
+        }
+
         if(r.is_loan_return) tr.classList.add('loan-row');
         const overdue = isOverdue(r);
         let statusHtml;
@@ -1999,9 +2071,10 @@
 
     // COLLECTED section
     let collectedRows = allRows.filter(r => r.collected);
-    // Apply branch filter (independent of the active-tab branch filter)
+    // Filter by the branch where the item was collected (falls back to the
+    // repair's branch for older records collected before this was tracked).
     if(collectedFilter !== 'All'){
-      collectedRows = collectedRows.filter(r => r.branch === collectedFilter);
+      collectedRows = collectedRows.filter(r => (r.collected_branch || r.branch) === collectedFilter);
     }
 
     const cBody = document.getElementById('collectedBody');
@@ -2043,7 +2116,7 @@
           <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
-          <td data-label="Collected"><span class="badge collected">Collected</span><br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}${sigHtml}</td>
+          <td data-label="Collected"><span class="badge collected">Collected</span>${r.collected_branch ? `<br><span class="received-info">at ${escapeHtml(r.collected_branch)}${r.collected_by ? ' by ' + escapeHtml(r.collected_by) : ''}</span>` : (r.collected_by ? `<br><span class="received-info">by ${escapeHtml(r.collected_by)}</span>` : '')}<br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}${sigHtml}</td>
           <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
         `;
         cBody.appendChild(tr);
