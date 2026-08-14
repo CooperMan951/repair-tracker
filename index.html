@@ -1,10 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<!-- build:v6-diag -->
+<!-- build:2026-08-14-cachefix -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<script>
+  // Self-heal: if a stale service worker is pinning an old cached copy of this
+  // page, unregister it and drop its caches so the newest code always loads.
+  (function(){
+    try {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs){
+          regs.forEach(function(r){
+            if (location.href.indexOf(r.scope) === 0) r.unregister();
+          });
+        }).catch(function(){});
+      }
+      if (window.caches && caches.keys) {
+        caches.keys().then(function(keys){
+          keys.forEach(function(k){ if (/repair/i.test(k)) caches.delete(k); });
+        }).catch(function(){});
+      }
+    } catch(e){}
+  })();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ORMS Repair Tracker</title>
