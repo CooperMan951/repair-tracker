@@ -722,6 +722,12 @@
     <h3 id="scanTitle">Scanning slip…</h3>
     <div id="scanBody" style="font-size:0.9rem;color:var(--gray-text);">
       <p id="scanStatus">Reading the job number from the photo…</p>
+      <div id="scanManualEntry" style="display:none;margin-top:14px;">
+        <label for="scanManualNumber" style="font-size:0.85rem;font-weight:600;color:var(--text,#222);display:block;margin-bottom:4px;">Enter the job number manually:</label>
+        <input type="text" id="scanManualNumber" autocomplete="off" placeholder="e.g. O10S009119" style="width:100%;padding:9px;border:1px solid var(--gray-border);border-radius:5px;font-size:0.9rem;">
+        <button id="scanManualFindBtn" style="margin-top:8px;width:100%;padding:9px;background:#1d8a3f;color:#fff;border:none;border-radius:5px;font-size:0.9rem;cursor:pointer;">Find &amp; Collect</button>
+        <div id="scanManualMsg" style="font-size:0.8rem;margin-top:6px;min-height:1em;"></div>
+      </div>
     </div>
     <div class="modal-buttons" id="scanButtons" style="display:none;">
       <button class="cancel" id="cancelScan">Cancel</button>
@@ -1584,7 +1590,7 @@
       if(m) scanReadNumber = 'O10S' + m[1];
 
       if(!text.trim()){
-        showScanError('Couldn\u2019t read a number from that photo. If this job hasn\u2019t been logged yet, you can save the slip to deal with later, or use search to collect manually.', true);
+        showScanError('Couldn\u2019t read the job number from that photo. Enter it manually below — or save the slip for later if the repair isn\u2019t logged yet.', true);
         return;
       }
 
@@ -1605,7 +1611,7 @@
 
       if(candidates.length === 0){
         showScanError('No matching open repair found' + (scanReadNumber ? ' for <b>' + escapeHtml(scanReadNumber) + '</b>' : '') +
-          '. If this job hasn\u2019t been logged yet, you can save the slip to deal with later — or double-check the number and use search.', true);
+          '. Enter the job number manually below to collect it — or save the slip for later if it isn\u2019t logged yet.', true);
         return;
       }
       if(candidates.length > 1){
@@ -1641,14 +1647,53 @@
     document.getElementById('scanButtons').style.display = 'none';
     document.getElementById('scanCloseOnly').style.display = 'flex';
     document.getElementById('saveUnmatchedBtn').style.display = allowSave ? 'inline-block' : 'none';
+    // When the job couldn't be auto-matched, let the person type the number in.
+    const manual = document.getElementById('scanManualEntry');
+    if(manual){
+      manual.style.display = allowSave ? 'block' : 'none';
+      if(allowSave){
+        const inp = document.getElementById('scanManualNumber');
+        if(inp) inp.value = scanReadNumber || '';
+        const mm = document.getElementById('scanManualMsg');
+        if(mm) mm.textContent = '';
+      }
+    }
   }
+
+  // Manual entry: look up the typed job number and, if a repair is booked,
+  // switch to the confirm view so the photo is attached on collect.
+  document.getElementById('scanManualFindBtn').addEventListener('click', () => {
+    const num = (document.getElementById('scanManualNumber').value || '').trim();
+    const msg = document.getElementById('scanManualMsg');
+    if(!num){ if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Please type a job number.'; } return; }
+    const match = repairs.find(r => r.job_number && r.job_number.toUpperCase() === num.toUpperCase() && !r.collected);
+    if(!match){
+      if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'No open repair booked with ' + num + '. You can still save the slip for later (below).'; }
+      return;
+    }
+    scanMatchedId = match.id;
+    scanReadNumber = num;
+    document.getElementById('scanManualEntry').style.display = 'none';
+    document.getElementById('scanTitle').textContent = 'Confirm collection';
+    document.getElementById('scanStatus').innerHTML =
+      'Found this repair:<br><br>' +
+      '<b>Job:</b> ' + escapeHtml(match.job_number) + '<br>' +
+      '<b>Client:</b> ' + escapeHtml(match.name) + '<br>' +
+      '<b>Item:</b> ' + escapeHtml(match.item) + '<br>' +
+      '<b>Branch:</b> ' + escapeHtml(match.branch) +
+      '<br><br>Mark it collected and attach this photo?';
+    document.getElementById('scanButtons').style.display = 'flex';
+    document.getElementById('scanCloseOnly').style.display = 'none';
+  });
 
   document.getElementById('closeScanOnly').addEventListener('click', () => {
     document.getElementById('scanModal').classList.remove('show');
+    document.getElementById('scanManualEntry').style.display = 'none';
     scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
   });
   document.getElementById('cancelScan').addEventListener('click', () => {
     document.getElementById('scanModal').classList.remove('show');
+    document.getElementById('scanManualEntry').style.display = 'none';
     scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
   });
 
@@ -1665,8 +1710,10 @@
       if(upErr){ btn.disabled=false; btn.textContent='Save slip for later'; showToast('Upload failed: '+upErr.message); return; }
 
       const myEmail = document.getElementById('userEmailLabel').textContent.toLowerCase();
+      const manualInput = document.getElementById('scanManualNumber');
+      const manualNum = manualInput ? (manualInput.value || '').trim() : '';
       const { error: insErr } = await sb.from('unmatched_collections').insert({
-        read_number: scanReadNumber || null,
+        read_number: manualNum || scanReadNumber || null,
         photo_url: path,
         scanned_by: myEmail,
         branch: USER_BRANCH_MAP[myEmail] || null
