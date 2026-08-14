@@ -954,7 +954,12 @@
     }
 
     try {
+      body.innerHTML = '<p style="font-size:0.9rem;">RA: sorting…</p>';
       data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      body.innerHTML = '<p style="font-size:0.9rem;">RB: testing date formatting on all rows…</p>';
+      let _dt = '';
+      for(let j = 0; j < data.length; j++){ _dt = (data[j] && data[j].created_at) ? new Date(data[j].created_at).toLocaleString() : ''; }
+      body.innerHTML = '<p style="font-size:0.9rem;">RC: dates OK (last=' + escapeHtml(_dt) + '), building rows…</p>';
       let h = '';
       for(let i = 0; i < data.length; i++){
         const u = data[i] || {};
@@ -977,6 +982,7 @@
           + '<button class="unmatched-remove" data-id="' + pid + '" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>'
           + '</div></div>';
       }
+      body.innerHTML = '<p style="font-size:0.9rem;">RD: built ' + h.length + ' chars, injecting…</p>';
       body.innerHTML = h;
     } catch(buildErr){
       body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t display: ' +
