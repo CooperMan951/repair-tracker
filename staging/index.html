@@ -443,6 +443,19 @@
     <label for="item">Item</label>
     <input type="text" id="item" autocomplete="off" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
 
+    <div id="buyinCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="buyinCheck" style="width:auto;">
+      <label for="buyinCheck" style="margin:0;">Buy-in / used gear (in-house repair)</label>
+    </div>
+
+    <div id="buyinFields" style="display:none;">
+      <label for="stockCode">Stock Code</label>
+      <input type="text" id="stockCode" autocomplete="off" placeholder="Stock item number">
+
+      <label for="usedGearDoc" style="margin-top:10px;">Used Gear Document No.</label>
+      <input type="text" id="usedGearDoc" autocomplete="off" placeholder="Used gear document number">
+    </div>
+
     <button class="submit" id="submitBtn">Log Repair</button>
   </div>
 
@@ -1212,6 +1225,9 @@
     const contact = document.getElementById('contact').value.trim();
     const jobNumber = document.getElementById('jobNumber').value.trim();
     const item = document.getElementById('item').value.trim();
+    const isBuyin = document.getElementById('buyinCheck').checked;
+    const stockCode = document.getElementById('stockCode').value.trim();
+    const usedGearDoc = document.getElementById('usedGearDoc').value.trim();
 
     if(!selectedBranch){
       showToast('Please select a branch');
@@ -1220,6 +1236,7 @@
     }
     document.getElementById('branchToggle').classList.remove('invalid');
     if(!name || !jobNumber || !item){ showToast('Please fill in Name, Job Number and Item'); return; }
+    if(isBuyin && (!stockCode || !usedGearDoc)){ showToast('Please fill in the Stock Code and Used Gear Document No.'); return; }
 
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = true;
@@ -1231,6 +1248,9 @@
       contact_number: contact,
       job_number: jobNumber,
       item: item,
+      is_buyin: isBuyin,
+      stock_code: isBuyin ? stockCode : null,
+      used_gear_doc: isBuyin ? usedGearDoc : null,
       logged_by_branch: USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown'
     }).select().single();
 
@@ -1255,9 +1275,22 @@
     document.getElementById('contact').value = '';
     document.getElementById('jobNumber').value = '';
     document.getElementById('item').value = '';
+    document.getElementById('buyinCheck').checked = false;
+    document.getElementById('buyinFields').style.display = 'none';
+    document.getElementById('stockCode').value = '';
+    document.getElementById('usedGearDoc').value = '';
     document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
     selectedBranch = null;
     showToast('Repair logged');
+  });
+
+  // Buy-in tick: reveal stock/doc fields and pre-fill the standard in-house name.
+  document.getElementById('buyinCheck').addEventListener('change', (e) => {
+    document.getElementById('buyinFields').style.display = e.target.checked ? 'block' : 'none';
+    if(e.target.checked){
+      const nameField = document.getElementById('name');
+      if(!nameField.value.trim()) nameField.value = 'Orms Inhouse Repair';
+    }
   });
 
   let pendingDisposition = null;
@@ -1946,7 +1979,7 @@
 
   function matchesSearch(r){
     if(!searchQuery) return true;
-    const haystack = [r.name, r.contact_number, r.job_number, r.item].join(' ').toLowerCase();
+    const haystack = [r.name, r.contact_number, r.job_number, r.item, r.stock_code, r.used_gear_doc].join(' ').toLowerCase();
     return haystack.includes(searchQuery);
   }
 
@@ -2047,7 +2080,7 @@
           <td data-label="To Branch">${escapeHtml(r.branch)}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
-          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}</td>
+          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
           <td data-label="Status">${statusHtml}</td>
@@ -2114,7 +2147,7 @@
           <td data-label="To Branch">${escapeHtml(r.branch)}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
-          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier</span>` : ''}</td>
+          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
           <td data-label="Collected"><span class="badge collected">Collected</span>${r.collected_branch ? `<br><span class="received-info">at ${escapeHtml(r.collected_branch)}${r.collected_by ? ' by ' + escapeHtml(r.collected_by) : ''}</span>` : (r.collected_by ? `<br><span class="received-info">by ${escapeHtml(r.collected_by)}</span>` : '')}<br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}${sigHtml}</td>
