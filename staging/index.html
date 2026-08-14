@@ -961,13 +961,22 @@
       const photoBtn = u.photo_url
         ? '<button class="unmatched-view" data-path="' + esc(u.photo_url) + '" style="font-size:0.8rem;color:#1d4f8a;background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;">📷 View slip</button>'
         : '';
+      // For slips whose number couldn't be read, offer a manual entry box that
+      // looks up the repair and allocates the collection to it.
+      const manualAlloc = !u.read_number
+        ? '<input type="text" class="manual-num-input" placeholder="Enter job #" style="font-size:0.8rem;padding:5px 8px;border:1px solid var(--gray-border,#ccc);border-radius:5px;width:140px;">'
+          + '<button class="manual-alloc-btn" data-slip-id="' + esc(String(u.id||'')) + '" data-photo="' + esc(u.photo_url||'') + '" style="font-size:0.78rem;padding:5px 12px;background:#1d8a3f;color:#fff;border:none;border-radius:5px;cursor:pointer;">Allocate</button>'
+        : '';
       h += '<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">'
         + '<div style="font-weight:600;">' + rn + '</div>'
         + '<div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">' + esc(u.branch||'—') + ' &middot; ' + esc(u.scanned_by||'') + ' &middot; ' + esc(when) + '</div>'
-        + '<div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">'
+        + '<div style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">'
         + photoBtn
+        + manualAlloc
         + '<button class="unmatched-remove" data-id="' + esc(String(u.id||'')) + '" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>'
-        + '</div></div>';
+        + '</div>'
+        + '<div class="manual-alloc-msg" style="font-size:0.76rem;margin-top:6px;min-height:1em;"></div>'
+        + '</div>';
     }
     body.innerHTML = h;
 
@@ -992,6 +1001,63 @@
         const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
         if(delErr){ btn.disabled = false; btn.textContent = 'Remove'; return; }
         loadUnmatched();
+      });
+    });
+
+    // Allocate — for unread slips, look up the typed job number and, if a repair
+    // matches, mark it collected and clear the slip.
+    body.querySelectorAll('.manual-alloc-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const card = btn.closest('div').parentElement; // the slip card
+        const input = card.querySelector('.manual-num-input');
+        const msg = card.querySelector('.manual-alloc-msg');
+        const num = (input && input.value ? input.value : '').trim();
+        if(!num){ if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Please type a job number first.'; } return; }
+        btn.disabled = true; btn.textContent = 'Checking…';
+        if(msg){ msg.style.color = 'var(--gray-text,#555)'; msg.textContent = 'Looking up ' + num + '…'; }
+
+        // Find a repair with this job number (case-insensitive, exact).
+        const { data: matches, error: qErr } = await sb.from('repairs')
+          .select('id, job_number, name, collected').ilike('job_number', num);
+        if(qErr){
+          if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Error: ' + qErr.message; }
+          btn.disabled = false; btn.textContent = 'Allocate'; return;
+        }
+        if(!matches || matches.length === 0){
+          if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'No repair found with number ' + num + '. It may not be logged yet.'; }
+          btn.disabled = false; btn.textContent = 'Allocate'; return;
+        }
+
+        // Prefer a not-yet-collected match.
+        const target = matches.find(m => !m.collected) || matches[0];
+
+        // Mark the repair collected.
+        const { error: upErr } = await sb.from('repairs')
+          .update({ collected: true, collected_at: new Date().toISOString() })
+          .eq('id', target.id);
+        if(upErr){
+          if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Error: ' + upErr.message; }
+          btn.disabled = false; btn.textContent = 'Allocate'; return;
+        }
+
+        // Best-effort: keep the signed slip as proof by copying it to the
+        // signatures bucket and linking it on the repair.
+        try {
+          if(btn.dataset.photo){
+            const { data: blob } = await sb.storage.from('unmatched-slips').download(btn.dataset.photo);
+            if(blob){
+              const newPath = target.id + '-slip-' + Date.now() + '.jpg';
+              const { error: upl } = await sb.storage.from('signatures').upload(newPath, blob);
+              if(!upl) await sb.from('repairs').update({ signature_url: newPath }).eq('id', target.id);
+            }
+          }
+        } catch(e){ /* non-blocking */ }
+
+        // Clear the slip and record the number that was entered.
+        await sb.from('unmatched_collections').update({ handled: true, read_number: num }).eq('id', btn.dataset.slipId);
+
+        if(msg){ msg.style.color = '#1d8a3f'; msg.textContent = 'Allocated to ' + (target.name || num) + ' ✓ — marked collected.'; }
+        setTimeout(loadUnmatched, 1200);
       });
     });
   }
