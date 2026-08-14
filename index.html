@@ -430,8 +430,10 @@
     <label for="name">Name</label>
     <input type="text" id="name" autocomplete="off" placeholder="Client name">
 
-    <label for="contact">Contact Number</label>
-    <input type="text" id="contact" autocomplete="off" placeholder="e.g. 021 469 1962">
+    <div id="contactRow">
+      <label for="contact">Contact Number</label>
+      <input type="text" id="contact" autocomplete="off" placeholder="e.g. 021 469 1962">
+    </div>
 
     <label for="jobNumber">Job Number</label>
     <input type="text" id="jobNumber" autocomplete="off" placeholder="e.g. O10S009119">
@@ -1273,6 +1275,7 @@
     document.getElementById('item').value = '';
     document.getElementById('buyinCheck').checked = false;
     document.getElementById('buyinFields').style.display = 'none';
+    document.getElementById('contactRow').style.display = 'block';
     document.getElementById('stockCode').value = '';
     document.getElementById('usedGearDoc').value = '';
     document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
@@ -1283,7 +1286,10 @@
   // Buy-in tick: reveal stock/doc fields and pre-fill the standard in-house name.
   document.getElementById('buyinCheck').addEventListener('change', (e) => {
     document.getElementById('buyinFields').style.display = e.target.checked ? 'block' : 'none';
+    // Internal repair — no client contact number needed.
+    document.getElementById('contactRow').style.display = e.target.checked ? 'none' : 'block';
     if(e.target.checked){
+      document.getElementById('contact').value = '';
       const nameField = document.getElementById('name');
       if(!nameField.value.trim()) nameField.value = 'Orms Inhouse Repair';
     }
