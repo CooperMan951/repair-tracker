@@ -1,0 +1,2477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- build:2026-08-14-cachefix -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  // Self-heal: if a stale service worker is pinning an old cached copy of this
+  // page, unregister it and drop its caches so the newest code always loads.
+  (function(){
+    try {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs){
+          regs.forEach(function(r){
+            if (location.href.indexOf(r.scope) === 0) r.unregister();
+          });
+        }).catch(function(){});
+      }
+      if (window.caches && caches.keys) {
+        caches.keys().then(function(keys){
+          keys.forEach(function(k){ if (/repair/i.test(k)) caches.delete(k); });
+        }).catch(function(){});
+      }
+    } catch(e){}
+  })();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORMS Repair Tracker</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root{
+    --black:#111111;
+    --white:#ffffff;
+    --gray-bg:#f4f4f4;
+    --gray-border:#dcdcdc;
+    --gray-text:#555;
+    --yellow:#ffe14d;
+    --green:#1d8a3f;
+    --red:#c0392b;
+  }
+  *{box-sizing:border-box;}
+  html, body{ max-width:100%; overflow-x:hidden; }
+  body{
+    margin:0;
+    font-family:'Segoe UI', Arial, sans-serif;
+    background:var(--gray-bg);
+    color:var(--black);
+  }
+  header{
+    background:var(--black);
+    color:var(--white);
+    padding:18px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  header h1{
+    margin:0;
+    font-size:1.3rem;
+    letter-spacing:0.5px;
+  }
+  header span{
+    font-size:0.75rem;
+    color:#bbb;
+  }
+  .container{
+    max-width:900px;
+    margin:0 auto;
+    padding:20px;
+  }
+  .card{
+    background:var(--white);
+    border:1px solid var(--gray-border);
+    border-radius:8px;
+    padding:20px;
+    margin-bottom:24px;
+  }
+  .card h2{
+    margin-top:0;
+    font-size:1.05rem;
+    border-bottom:2px solid var(--black);
+    padding-bottom:8px;
+  }
+  .branch-toggle{
+    display:flex;
+    gap:10px;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+  }
+  .branch-btn{
+    flex:1;
+    min-width:110px;
+    padding:12px;
+    text-align:center;
+    border:2px solid var(--black);
+    border-radius:6px;
+    cursor:pointer;
+    font-weight:600;
+    background:var(--white);
+    user-select:none;
+  }
+  .branch-btn.selected{
+    background:var(--black);
+    color:var(--white);
+  }
+  .branch-toggle.invalid .branch-btn{
+    border-color:var(--red);
+  }
+  label{
+    display:block;
+    font-size:0.8rem;
+    font-weight:600;
+    margin-top:12px;
+    margin-bottom:4px;
+    color:var(--gray-text);
+  }
+  input[type=text]{
+    width:100%;
+    padding:10px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.95rem;
+  }
+  button.submit{
+    margin-top:18px;
+    width:100%;
+    padding:13px;
+    background:var(--black);
+    color:var(--white);
+    border:none;
+    border-radius:6px;
+    font-size:1rem;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button.submit:hover{ background:#333; }
+  .filters{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .filter-btn{
+    padding:8px 14px;
+    border:1px solid var(--black);
+    border-radius:20px;
+    background:var(--white);
+    cursor:pointer;
+    font-size:0.85rem;
+  }
+  .filter-btn.active{
+    background:var(--black);
+    color:var(--white);
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:0.85rem;
+  }
+  th,td{
+    padding:9px 8px;
+    border-bottom:1px solid var(--gray-border);
+    text-align:left;
+    vertical-align:middle;
+  }
+  th{
+    color:var(--gray-text);
+    font-size:0.72rem;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+  }
+  .badge{
+    display:inline-block;
+    padding:3px 9px;
+    border-radius:12px;
+    font-size:0.72rem;
+    font-weight:700;
+  }
+  .badge.pending{ background:var(--yellow); color:#5a4500; }
+  .badge.received{ background:#d7f2dd; color:var(--green); }
+  .badge.collected{ background:#dbe6f7; color:#1d4f8a; }
+  .badge.overdue{ background:#fbe0dc; color:var(--red); margin-left:6px; }
+  .receive-btn{
+    padding:6px 10px;
+    background:var(--green);
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.78rem;
+  }
+  .receive-btn:hover{ background:#176b32; }
+  .collect-btn{
+    padding:6px 10px;
+    background:#1d4f8a;
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.78rem;
+    margin-top:4px;
+  }
+  .collect-btn:hover{ background:#163c69; }
+  .redo-btn{
+    padding:3px 7px;
+    background:transparent;
+    color:#8a5b1d;
+    border:1px solid #c9a06a;
+    border-radius:4px;
+    cursor:pointer;
+    font-size:0.68rem;
+    margin-top:4px;
+    display:block;
+  }
+  .redo-btn:hover{ background:#fbe8d3; }
+  .badge.redo{ background:#fbe8d3; color:#8a5b1d; margin-left:6px; }
+  tr.loan-row td{ background:#fffde8 !important; }
+  .delete-btn{
+    padding:6px 10px;
+    background:var(--red);
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:0.78rem;
+    margin-top:4px;
+  }
+  .delete-btn:hover{ background:#962e23; }
+  .search-wrap{
+    margin-bottom:14px;
+  }
+  .search-wrap input{
+    width:100%;
+    padding:10px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.9rem;
+  }
+  /* Detection trick: Chrome applies :-webkit-autofill to fields it has
+     autofilled. Attaching a no-op animation to that pseudo-class lets us
+     catch an 'animationstart' JS event the instant autofill happens, so we
+     can immediately clear the field regardless of when Chrome decides to
+     fill it (page load, focus, or otherwise). */
+  @keyframes onAutoFillStart { from {} to {} }
+  input:-webkit-autofill{
+    animation-name: onAutoFillStart;
+    animation-duration: 0.001s;
+  }
+  .login-screen{
+    max-width:380px;
+    margin:60px auto;
+    background:var(--white);
+    border:1px solid var(--gray-border);
+    border-radius:8px;
+    padding:28px 24px;
+  }
+  .login-screen h2{
+    margin-top:0;
+    font-size:1.1rem;
+  }
+  .login-screen p{
+    font-size:0.85rem;
+    color:var(--gray-text);
+  }
+  .login-screen input{
+    width:100%;
+    padding:11px;
+    border:1px solid var(--gray-border);
+    border-radius:5px;
+    font-size:0.95rem;
+    margin-top:6px;
+  }
+  .login-screen button{
+    width:100%;
+    margin-top:14px;
+    padding:12px;
+    background:var(--black);
+    color:var(--white);
+    border:none;
+    border-radius:6px;
+    font-size:0.95rem;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .signout-btn{
+    background:none;
+    border:1px solid #444;
+    color:var(--white);
+    padding:6px 12px;
+    border-radius:5px;
+    font-size:0.75rem;
+    cursor:pointer;
+  }
+  .admin-btn{
+    background:none;
+    border:1px solid #444;
+    color:var(--white);
+    padding:6px 12px;
+    border-radius:5px;
+    font-size:0.75rem;
+    cursor:pointer;
+  }
+  header .right{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+  .section-toggle{
+    display:flex;
+    gap:8px;
+    margin-bottom:16px;
+  }
+  .section-toggle .filter-btn{ flex:1; text-align:center; }
+  .overdue-banner{
+    display:none;
+    background:#fbe0dc;
+    color:var(--red);
+    border:1px solid #f0b8af;
+    border-radius:6px;
+    padding:12px 14px;
+    font-size:0.85rem;
+    font-weight:600;
+    margin-bottom:16px;
+  }
+  .overdue-banner.show{ display:block; }
+  .received-info{
+    font-size:0.75rem;
+    color:var(--gray-text);
+  }
+  .empty{
+    text-align:center;
+    padding:30px;
+    color:var(--gray-text);
+  }
+  .toast{
+    position:fixed;
+    bottom:20px;
+    left:50%;
+    transform:translateX(-50%);
+    background:var(--black);
+    color:white;
+    padding:10px 20px;
+    border-radius:6px;
+    font-size:0.85rem;
+    opacity:0;
+    transition:opacity 0.3s;
+    pointer-events:none;
+  }
+  .toast.show{ opacity:1; }
+  .modal-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.5);
+    align-items:center;
+    justify-content:center;
+    z-index:50;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal{
+    background:white;
+    border-radius:8px;
+    padding:24px;
+    width:90%;
+    max-width:340px;
+  }
+  .modal h3{ margin-top:0; }
+  .modal-buttons{
+    display:flex;
+    gap:10px;
+    margin-top:18px;
+  }
+  .modal-buttons button{
+    flex:1;
+    padding:10px;
+    border-radius:6px;
+    border:none;
+    cursor:pointer;
+    font-weight:600;
+  }
+  .modal-buttons .cancel{ background:var(--gray-bg); border:1px solid var(--gray-border); }
+  .modal-buttons .confirm{ background:var(--green); color:white; }
+  @media (max-width:600px){
+    table, thead, tbody, th, td, tr{ display:block; }
+    thead{ display:none; }
+    tr{
+      margin-bottom:12px;
+      border:1px solid var(--gray-border);
+      border-radius:6px;
+      padding:10px;
+    }
+    td{
+      border:none;
+      display:flex;
+      justify-content:space-between;
+      padding:5px 0;
+    }
+    td::before{
+      content:attr(data-label);
+      font-weight:600;
+      color:var(--gray-text);
+      font-size:0.72rem;
+      text-transform:uppercase;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ORMS Repair Tracker</h1>
+  <div class="right">
+    <span id="connStatus"></span>
+    <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
+    <button class="admin-btn" id="statsBtn" style="display:none;">Stats</button>
+    <button class="admin-btn" id="unmatchedBtn" style="display:none;">Unmatched</button>
+    <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
+    <button class="admin-btn" id="changePwBtn" style="display:none;">Password</button>
+    <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
+  </div>
+</header>
+
+<div id="loginScreen" class="login-screen">
+  <h2>Sign in</h2>
+  <p>Enter your email and password to access the repair tracker.</p>
+  <label for="loginEmailInput" style="font-size:0.8rem;font-weight:600;color:var(--gray-text);">Email</label>
+  <input type="email" id="loginEmailInput" autocomplete="username" placeholder="you@orms.co.za">
+  <label for="loginPasswordInput" style="font-size:0.8rem;font-weight:600;color:var(--gray-text);margin-top:10px;display:block;">Password</label>
+  <input type="password" id="loginPasswordInput" autocomplete="current-password" placeholder="Password">
+  <button id="signInBtn">Sign In</button>
+</div>
+
+<div id="appContent" style="display:none;">
+<div class="container">
+
+  <div class="card" id="logRepairCard">
+    <label>To Branch</label>
+    <div class="branch-toggle" id="branchToggle">
+      <div class="branch-btn" data-branch="Cape Town">Cape Town</div>
+      <div class="branch-btn" data-branch="Bellville">Bellville</div>
+      <div class="branch-btn" data-branch="Somerset">Somerset</div>
+    </div>
+
+    <label for="name">Name</label>
+    <input type="text" id="name" autocomplete="off" placeholder="Client name">
+
+    <div id="contactRow">
+      <label for="contact">Contact Number</label>
+      <input type="text" id="contact" autocomplete="off" placeholder="e.g. 021 469 1962">
+    </div>
+
+    <label for="jobNumber">Job Number</label>
+    <input type="text" id="jobNumber" autocomplete="off" placeholder="e.g. O10S009119">
+
+    <label for="item">Item</label>
+    <input type="text" id="item" autocomplete="off" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
+
+    <div id="buyinCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="buyinCheck" style="width:auto;">
+      <label for="buyinCheck" style="margin:0;">Buy-in / used gear (in-house repair)</label>
+    </div>
+
+    <div id="buyinFields" style="display:none;">
+      <label for="stockCode">Stock Code</label>
+      <input type="text" id="stockCode" autocomplete="off" placeholder="Stock item number">
+
+      <label for="usedGearDoc" style="margin-top:10px;">Used Gear Document No.</label>
+      <input type="text" id="usedGearDoc" autocomplete="off" placeholder="Used gear document number">
+    </div>
+
+    <button class="submit" id="submitBtn">Log Repair</button>
+  </div>
+
+  <div class="card" id="repairsCard">
+    <h2>Repairs</h2>
+
+    <button id="scanCollectBtn" style="display:none;width:100%;padding:12px;margin-bottom:12px;background:#1d8a3f;color:#fff;border:none;border-radius:6px;font-size:0.95rem;font-weight:600;cursor:pointer;align-items:center;justify-content:center;gap:8px;">
+      📷 Scan signed slip to collect
+    </button>
+    <input type="file" id="scanCollectInput" accept="image/*" capture="environment" style="display:none;">
+
+    <div class="overdue-banner" id="overdueBanner"></div>
+
+    <div class="search-wrap" id="searchWrap"></div>
+
+    <div class="section-toggle" id="sectionToggle">
+      <div class="filter-btn active" data-section="pending">Pending</div>
+      <div class="filter-btn" data-section="active">Active</div>
+      <div class="filter-btn" data-section="collected">Collected</div>
+    </div>
+
+    <div id="activeSection">
+      <div class="filters" id="filters">
+        <div class="filter-btn active" data-filter="All">All</div>
+        <div class="filter-btn" data-filter="Cape Town">Cape Town</div>
+        <div class="filter-btn" data-filter="Bellville">Bellville</div>
+        <div class="filter-btn" data-filter="Somerset">Somerset</div>
+      </div>
+
+      <table id="repairsTable">
+        <thead>
+          <tr id="repairsHeadRow">
+            <th>To Branch</th>
+            <th>Logged By</th>
+            <th>Job #</th>
+            <th>Item</th>
+            <th>Name</th>
+            <th>Contact</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="repairsBody"></tbody>
+      </table>
+      <div class="empty" id="emptyState" style="display:none;">No repairs logged yet.</div>
+    </div>
+
+    <div id="collectedSection" style="display:none;">
+      <div class="filters" id="collectedFilters">
+        <div class="filter-btn active" data-cfilter="All">All</div>
+        <div class="filter-btn" data-cfilter="Cape Town">Cape Town</div>
+        <div class="filter-btn" data-cfilter="Bellville">Bellville</div>
+        <div class="filter-btn" data-cfilter="Somerset">Somerset</div>
+      </div>
+      <table id="collectedTable">
+        <thead>
+          <tr>
+            <th>To Branch</th>
+            <th>Logged By</th>
+            <th>Job #</th>
+            <th>Item</th>
+            <th>Name</th>
+            <th>Contact</th>
+            <th>Collected</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="collectedBody"></tbody>
+      </table>
+      <div class="empty" id="collectedEmptyState" style="display:none;">No collected repairs yet.</div>
+      <div id="collectedPagination" style="display:none;align-items:center;justify-content:center;gap:14px;margin-top:14px;">
+        <button id="collectedPrev" class="filter-btn" style="cursor:pointer;">← Prev</button>
+        <span id="collectedPageInfo" style="font-size:0.85rem;color:var(--gray-text);"></span>
+        <button id="collectedNext" class="filter-btn" style="cursor:pointer;">Next →</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="receiveModal">
+  <div class="modal">
+    <h3>Confirm Receipt</h3>
+    <label for="receivedByInput">Your name</label>
+    <input type="text" id="receivedByInput" autocomplete="off" placeholder="Who is ticking this off?">
+
+    <div id="loanDispositionSection" style="display:none;margin-top:14px;">
+      <label>This loan unit will go:</label>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <button type="button" class="branch-btn" id="dispositionSupplier" style="flex:1;padding:10px;font-size:0.85rem;">Back to Supplier</button>
+        <button type="button" class="branch-btn" id="dispositionStore" style="flex:1;padding:10px;font-size:0.85rem;">Back to Store</button>
+      </div>
+    </div>
+
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelReceive">Cancel</button>
+      <button class="confirm" id="confirmReceive">Mark Received</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="collectModal">
+  <div class="modal">
+    <h3>Confirm Collection</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Mark this item as collected by the client now?</p>
+
+    <label for="collectedByInput">Collected by (name)</label>
+    <input type="text" id="collectedByInput" autocomplete="off" placeholder="Name of person collecting">
+
+    <label for="collectedBranchSelect" style="margin-top:10px;">Collecting at</label>
+    <select id="collectedBranchSelect" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:5px;font-size:0.9rem;margin-top:4px;">
+      <option value="Cape Town">Cape Town</option>
+      <option value="Bellville">Bellville</option>
+      <option value="Somerset">Somerset</option>
+    </select>
+
+    <label for="collectPhotoInput" style="margin-top:14px;display:block;">Photo (optional)</label>
+    <input type="file" id="collectPhotoInput" accept="image/*" capture="environment">
+
+    <label style="margin-top:14px;display:block;">Client signature (optional)</label>
+    <canvas id="signaturePad" style="width:100%;height:140px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
+    <button type="button" id="clearSignatureBtn" style="margin-top:6px;padding:5px 12px;font-size:0.78rem;background:transparent;border:1px solid var(--gray-border);border-radius:5px;cursor:pointer;color:var(--gray-text);">Clear signature</button>
+
+    <div id="courierCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="courierCheck" style="width:auto;">
+      <label for="courierCheck" style="margin:0;">Courier delivery?</label>
+    </div>
+
+    <div id="courierFields" style="display:none;">
+      <label for="courierAddress">Courier Address</label>
+      <input type="text" id="courierAddress" autocomplete="off" placeholder="Full delivery address">
+
+      <label for="waybillFile" style="margin-top:10px;">Waybill (photo/PDF)</label>
+      <input type="file" id="waybillFile" accept="image/*,.pdf">
+    </div>
+
+    <div id="loanReturnCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="loanReturnCheck" style="width:auto;">
+      <label for="loanReturnCheck" style="margin:0;">Loan unit return?</label>
+    </div>
+
+    <div id="loanReturnFields" style="display:none;">
+      <label for="loanReturnBranch">Return to which branch?</label>
+      <select id="loanReturnBranch" style="width:100%;padding:10px;border:1px solid var(--gray-border);border-radius:5px;font-size:0.9rem;margin-top:4px;">
+        <option value="Cape Town">Cape Town</option>
+        <option value="Bellville">Bellville</option>
+        <option value="Somerset">Somerset</option>
+      </select>
+      <label for="loanReturnItem" style="margin-top:10px;">Loan unit item</label>
+      <input type="text" id="loanReturnItem" autocomplete="off" placeholder="e.g. Canon EOS R6 - Loan Unit">
+    </div>
+
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelCollect">Cancel</button>
+      <button class="confirm" id="confirmCollect">Mark Collected</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="redoModal">
+  <div class="modal">
+    <h3>Return for Redo</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;" id="redoOriginText">This will flag the item as returned to its origin branch for redo.</p>
+    <label for="redoByInput">Your name</label>
+    <input type="text" id="redoByInput" autocomplete="off" placeholder="Who is sending this back?">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelRedo">Cancel</button>
+      <button class="confirm" id="confirmRedo" style="background:#8a5b1d;">Confirm Return</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3>Delete Repair</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">This permanently removes the record. Admin PIN required.</p>
+    <label for="deletePinInput">Admin PIN</label>
+    <input type="password" id="deletePinInput" inputmode="numeric" autocomplete="off" placeholder="Enter PIN">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelDelete">Cancel</button>
+      <button class="confirm" id="confirmDelete" style="background:var(--red);">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="viewerModal">
+  <div class="modal" style="max-width:520px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <h3 id="viewerTitle" style="margin:0;">Preview</h3>
+      <button class="cancel" id="closeViewer" style="padding:5px 12px;">Close</button>
+    </div>
+    <div id="viewerBody" style="text-align:center;min-height:120px;display:flex;align-items:center;justify-content:center;">
+      <span id="viewerLoading" style="color:var(--gray-text);font-size:0.85rem;">Loading…</span>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="adminModal">
+  <div class="modal" style="max-width:400px;">
+    <h3>Add New User</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Enter the new user's details and confirm with the admin PIN.</p>
+    <label for="newUserEmail">Email address</label>
+    <input type="email" id="newUserEmail" autocomplete="off" placeholder="user@orms.co.za">
+    <label for="newUserPassword" style="margin-top:10px;display:block;">Temporary password</label>
+    <input type="text" id="newUserPassword" autocomplete="off" placeholder="Set a strong password">
+    <label for="adminPinForUser" style="margin-top:10px;display:block;">Admin PIN</label>
+    <input type="password" id="adminPinForUser" inputmode="numeric" autocomplete="off" placeholder="Enter PIN">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelAdmin">Cancel</button>
+      <button class="confirm" id="confirmAddUser">Add User</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="statsModal">
+  <div class="modal" style="max-width:640px;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="margin:0;">Repair Statistics</h3>
+      <button class="cancel" id="closeStats" style="padding:5px 12px;">Close</button>
+    </div>
+    <div id="statsBody"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="changePwModal">
+  <div class="modal" style="max-width:400px;">
+    <h3>Change Your Password</h3>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Set a new password only you know. You'll stay logged in.</p>
+    <label for="newPwInput">New password</label>
+    <input type="password" id="newPwInput" autocomplete="new-password" placeholder="At least 8 characters">
+    <label for="confirmPwInput" style="margin-top:10px;display:block;">Confirm new password</label>
+    <input type="password" id="confirmPwInput" autocomplete="new-password" placeholder="Re-enter new password">
+    <div class="modal-buttons">
+      <button class="cancel" id="cancelChangePw">Cancel</button>
+      <button class="confirm" id="confirmChangePw">Update Password</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="scanModal">
+  <div class="modal" style="max-width:440px;">
+    <h3 id="scanTitle">Scanning slip…</h3>
+    <div id="scanBody" style="font-size:0.9rem;color:var(--gray-text);">
+      <p id="scanStatus">Reading the job number from the photo…</p>
+    </div>
+    <div class="modal-buttons" id="scanButtons" style="display:none;">
+      <button class="cancel" id="cancelScan">Cancel</button>
+      <button class="confirm" id="confirmScanCollect" style="background:#1d8a3f;">Mark Collected</button>
+    </div>
+    <div class="modal-buttons" id="scanCloseOnly" style="display:none;">
+      <button class="cancel" id="closeScanOnly">Close</button>
+      <button class="confirm" id="saveUnmatchedBtn" style="background:#8a5b1d;display:none;">Save slip for later</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="unmatchedModal">
+  <div class="modal" style="max-width:560px;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="margin:0;">Unmatched Slips</h3>
+      <button class="cancel" id="closeUnmatched" style="padding:5px 12px;">Close</button>
+    </div>
+    <p style="font-size:0.85rem;color:var(--gray-text);margin-top:-6px;">Slips scanned for jobs not yet logged. Log the repair when ready, then remove the slip here.</p>
+    <div id="unmatchedBody"></div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let selectedBranch = null;
+  let activeFilter = "All";
+  let pendingReceiveId = null;
+  let pendingCollectId = null;
+  let pendingDeleteId = null;
+  let repairs = [];
+  let searchQuery = "";
+  let activeSection = "pending";
+  let collectedFilter = "All";
+  let collectedPage = 1;
+  const COLLECTED_PER_PAGE = 10;
+
+  const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 3; // 3-month overdue threshold
+
+  // ---- Auth ----
+
+  function showLoggedOut(){
+    document.getElementById('loginScreen').style.display = 'block';
+    document.getElementById('appContent').style.display = 'none';
+    document.getElementById('signOutBtn').style.display = 'none';
+    document.getElementById('adminBtn').style.display = 'none';
+    document.getElementById('unmatchedBtn').style.display = 'none';
+    document.getElementById('changePwBtn').style.display = 'none';
+    document.getElementById('statsBtn').style.display = 'none';
+    document.getElementById('userEmailLabel').textContent = '';
+  }
+
+  const USER_BRANCH_MAP = {
+    'arno.cooper@orms.co.za':        'Bellville',
+    'japie.deklerk@orms.co.za':      'Bellville',
+    'faizel.lakay@orms.co.za':       'Bellville',
+    'brendan.magaar@orms.co.za':     'Bellville',
+    'marcel.yslie@orms.co.za':       'Bellville',
+    'gavin.birkholtz@orms.co.za':    'Bellville',
+    'phiwe.budaza@orms.co.za':       'Bellville',
+    'rejaad.hendricks@orms.co.za':   'Somerset',
+    'junaid.dollie@orms.co.za':      'Somerset',
+    'david.nash@orms.co.za':         'Somerset',
+    'bronwyn.jefferys@orms.co.za':   'Cape Town',
+    'joane.opperman@orms.co.za':     'Cape Town',
+    'liezel.adams@orms.co.za':       'Cape Town',
+    'clinton.olckers@orms.co.za':    'Cape Town',
+  };
+
+  const ADMIN_EMAILS = ['arno.cooper@orms.co.za', 'bronwyn.jefferys@orms.co.za'];
+  // Collection-station logins (e.g. the counter iPad): a restricted, collect-only view.
+  const COLLECTION_EMAILS = ['collections@orms.co.za'];
+  let collectionMode = false;
+
+  function showLoggedIn(email){
+    collectionMode = COLLECTION_EMAILS.includes(email.toLowerCase());
+
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appContent').style.display = 'block';
+    document.getElementById('signOutBtn').style.display = 'inline-block';
+    document.getElementById('userEmailLabel').textContent = email;
+
+    // Admin/management buttons — never for the collection station.
+    const isAdmin = ADMIN_EMAILS.includes(email.toLowerCase());
+    document.getElementById('adminBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('changePwBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('statsBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('unmatchedBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
+
+    if(collectionMode){
+      // Restricted counter view: only collect received repairs.
+      // Hide job creation entirely.
+      const logCard = document.getElementById('logRepairCard');
+      if(logCard) logCard.style.display = 'none';
+      // Hide the scan-to-collect button (collection is by search here).
+      const scanBtn = document.getElementById('scanCollectBtn');
+      if(scanBtn) scanBtn.style.display = 'none';
+      // Section toggle: only "Active" — hide Pending and Collected.
+      const toggle = document.getElementById('sectionToggle');
+      if(toggle){
+        toggle.querySelectorAll('.filter-btn').forEach(b => {
+          if(b.dataset.section === 'active'){ b.classList.add('active'); b.style.display = ''; }
+          else { b.classList.remove('active'); b.style.display = 'none'; }
+        });
+      }
+      activeSection = 'active';
+      // Restrict the active-table header to just Job # and Name.
+      const headRow = document.getElementById('repairsHeadRow');
+      if(headRow) headRow.innerHTML = '<th>Job #</th><th>Name</th><th></th>';
+      // Give the collection station a clear title.
+      const repairsHeading = document.querySelector('#repairsCard h2');
+      if(repairsHeading) repairsHeading.textContent = 'Collections';
+      activeFilter = 'All';
+      startApp();
+      return;
+    }
+
+    // ---- Normal (full) view ----
+    const defaultBranch = USER_BRANCH_MAP[email.toLowerCase()] || 'All';
+    activeFilter = defaultBranch;
+
+    if(defaultBranch === 'Bellville' || defaultBranch === 'Somerset'){
+      const container = document.querySelector('.container');
+      const repairsCard = document.getElementById('repairsCard');
+      const logCard = document.getElementById('logRepairCard');
+      container.insertBefore(repairsCard, logCard);
+    }
+
+    startApp();
+  }
+
+  document.getElementById('signInBtn').addEventListener('click', async () => {
+    const email = document.getElementById('loginEmailInput').value.trim().toLowerCase();
+    const password = document.getElementById('loginPasswordInput').value;
+    if(!email || !password){ showToast('Please enter your email and password'); return; }
+    const btn = document.getElementById('signInBtn');
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+    if(error){ showToast('Incorrect email or password'); return; }
+  });
+
+  // Allow pressing Enter in either login field to trigger sign in
+  ['loginEmailInput','loginPasswordInput'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', (e) => {
+      if(e.key === 'Enter') document.getElementById('signInBtn').click();
+    });
+  });
+
+  // Check for an existing session immediately on load (avoids login screen flash for already-logged-in users)
+  sb.auth.getSession().then(({ data: { session } }) => {
+    if(session && session.user) showLoggedIn(session.user.email);
+  });
+
+  document.getElementById('signOutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+  });
+
+  document.getElementById('adminBtn').addEventListener('click', () => {
+    document.getElementById('newUserEmail').value = '';
+    document.getElementById('newUserPassword').value = '';
+    document.getElementById('adminPinForUser').value = '';
+    document.getElementById('adminModal').classList.add('show');
+  });
+
+  document.getElementById('statsBtn').addEventListener('click', () => {
+    renderStats();
+    document.getElementById('statsModal').classList.add('show');
+  });
+  document.getElementById('closeStats').addEventListener('click', () => {
+    document.getElementById('statsModal').classList.remove('show');
+  });
+  document.getElementById('statsModal').addEventListener('click', (e) => {
+    if(e.target === document.getElementById('statsModal')){
+      document.getElementById('statsModal').classList.remove('show');
+    }
+  });
+
+  document.getElementById('unmatchedBtn').addEventListener('click', () => {
+    document.getElementById('unmatchedModal').classList.add('show');
+    loadUnmatched();
+  });
+  document.getElementById('closeUnmatched').addEventListener('click', () => {
+    document.getElementById('unmatchedModal').classList.remove('show');
+  });
+  document.getElementById('unmatchedModal').addEventListener('click', (e) => {
+    if(e.target === document.getElementById('unmatchedModal')){
+      document.getElementById('unmatchedModal').classList.remove('show');
+    }
+  });
+
+  async function loadUnmatched(){
+    const body = document.getElementById('unmatchedBody');
+    if(!body) return;
+    // Local escaping — self-contained so this never depends on an out-of-scope helper.
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+    body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading…</p>';
+
+    let data = null, error = null;
+    try {
+      const res = await sb.from('unmatched_collections').select('*').eq('handled', false);
+      data = res.data; error = res.error;
+    } catch(e){
+      error = { message: (e && e.message) ? e.message : 'connection problem' };
+    }
+
+    if(error){
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load: ' + esc(error.message||'unknown') +
+        '</p><button id="retryUnmatched" style="margin-top:8px;padding:6px 14px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;cursor:pointer;">Try again</button>';
+      const rb = document.getElementById('retryUnmatched');
+      if(rb) rb.addEventListener('click', loadUnmatched);
+      return;
+    }
+    if(!data || data.length === 0){
+      body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">No unmatched slips. 👍</p>';
+      return;
+    }
+
+    data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    let h = '';
+    for(let i = 0; i < data.length; i++){
+      const u = data[i] || {};
+      const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
+      const rn = u.read_number ? esc(u.read_number) : '(number not read)';
+      const photoBtn = u.photo_url
+        ? '<button class="unmatched-view" data-path="' + esc(u.photo_url) + '" style="font-size:0.8rem;color:#1d4f8a;background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;">📷 View slip</button>'
+        : '';
+      // For slips whose number couldn't be read, offer a manual entry box that
+      // looks up the repair and allocates the collection to it.
+      const manualAlloc = !u.read_number
+        ? '<input type="text" class="manual-num-input" placeholder="Enter job #" style="font-size:0.8rem;padding:5px 8px;border:1px solid var(--gray-border,#ccc);border-radius:5px;width:140px;">'
+          + '<button class="manual-alloc-btn" data-slip-id="' + esc(String(u.id||'')) + '" data-photo="' + esc(u.photo_url||'') + '" style="font-size:0.78rem;padding:5px 12px;background:#1d8a3f;color:#fff;border:none;border-radius:5px;cursor:pointer;">Allocate</button>'
+        : '';
+      h += '<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">'
+        + '<div style="font-weight:600;">' + rn + '</div>'
+        + '<div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">' + esc(u.branch||'—') + ' &middot; ' + esc(u.scanned_by||'') + ' &middot; ' + esc(when) + '</div>'
+        + '<div style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">'
+        + photoBtn
+        + manualAlloc
+        + '<button class="unmatched-remove" data-id="' + esc(String(u.id||'')) + '" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>'
+        + '</div>'
+        + '<div class="manual-alloc-msg" style="font-size:0.76rem;margin-top:6px;min-height:1em;"></div>'
+        + '</div>';
+    }
+    body.innerHTML = h;
+
+    // View slip — sign the URL with sb (in scope) and open it in a new tab.
+    body.querySelectorAll('.unmatched-view').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Opening…';
+        try {
+          const { data: signed, error: sErr } = await sb.storage.from('unmatched-slips').createSignedUrl(btn.dataset.path, 3600);
+          if(sErr || !signed){ btn.textContent = 'Error'; return; }
+          window.open(signed.signedUrl, '_blank');
+          btn.textContent = orig; btn.disabled = false;
+        } catch(e){ btn.textContent = 'Error'; }
+      });
+    });
+
+    // Remove — mark handled with sb (in scope), then refresh the list.
+    body.querySelectorAll('.unmatched-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true; btn.textContent = 'Removing…';
+        const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
+        if(delErr){ btn.disabled = false; btn.textContent = 'Remove'; return; }
+        loadUnmatched();
+      });
+    });
+
+    // Allocate — for unread slips, look up the typed job number and, if a repair
+    // matches, mark it collected and clear the slip.
+    body.querySelectorAll('.manual-alloc-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const card = btn.closest('div').parentElement; // the slip card
+        const input = card.querySelector('.manual-num-input');
+        const msg = card.querySelector('.manual-alloc-msg');
+        const num = (input && input.value ? input.value : '').trim();
+        if(!num){ if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Please type a job number first.'; } return; }
+        btn.disabled = true; btn.textContent = 'Checking…';
+        if(msg){ msg.style.color = 'var(--gray-text,#555)'; msg.textContent = 'Looking up ' + num + '…'; }
+
+        // Find a repair with this job number (case-insensitive, exact).
+        const { data: matches, error: qErr } = await sb.from('repairs')
+          .select('id, job_number, name, collected').ilike('job_number', num);
+        if(qErr){
+          if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Error: ' + qErr.message; }
+          btn.disabled = false; btn.textContent = 'Allocate'; return;
+        }
+        if(!matches || matches.length === 0){
+          if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'No repair found with number ' + num + '. It may not be logged yet.'; }
+          btn.disabled = false; btn.textContent = 'Allocate'; return;
+        }
+
+        // Prefer a not-yet-collected match.
+        const target = matches.find(m => !m.collected) || matches[0];
+
+        // Mark the repair collected.
+        const { error: upErr } = await sb.from('repairs')
+          .update({ collected: true, collected_at: new Date().toISOString() })
+          .eq('id', target.id);
+        if(upErr){
+          if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Error: ' + upErr.message; }
+          btn.disabled = false; btn.textContent = 'Allocate'; return;
+        }
+
+        // Best-effort: keep the signed slip as proof by copying it to the
+        // signatures bucket and linking it on the repair.
+        try {
+          if(btn.dataset.photo){
+            const { data: blob } = await sb.storage.from('unmatched-slips').download(btn.dataset.photo);
+            if(blob){
+              const newPath = target.id + '-slip-' + Date.now() + '.jpg';
+              const { error: upl } = await sb.storage.from('signatures').upload(newPath, blob);
+              if(!upl) await sb.from('repairs').update({ signature_url: newPath }).eq('id', target.id);
+            }
+          }
+        } catch(e){ /* non-blocking */ }
+
+        // Clear the slip and record the number that was entered.
+        await sb.from('unmatched_collections').update({ handled: true, read_number: num }).eq('id', btn.dataset.slipId);
+
+        if(msg){ msg.style.color = '#1d8a3f'; msg.textContent = 'Allocated to ' + (target.name || num) + ' ✓ — marked collected.'; }
+        setTimeout(loadUnmatched, 1200);
+      });
+    });
+  }
+
+  document.getElementById('changePwBtn').addEventListener('click', () => {
+    document.getElementById('newPwInput').value = '';
+    document.getElementById('confirmPwInput').value = '';
+    document.getElementById('changePwModal').classList.add('show');
+  });
+  document.getElementById('cancelChangePw').addEventListener('click', () => {
+    document.getElementById('changePwModal').classList.remove('show');
+  });
+  document.getElementById('confirmChangePw').addEventListener('click', async () => {
+    const pw = document.getElementById('newPwInput').value;
+    const confirmPw = document.getElementById('confirmPwInput').value;
+    if(pw.length < 8){ showToast('Password must be at least 8 characters'); return; }
+    if(pw !== confirmPw){ showToast('Passwords do not match'); return; }
+
+    const btn = document.getElementById('confirmChangePw');
+    btn.disabled = true;
+    btn.textContent = 'Updating…';
+    const { error } = await sb.auth.updateUser({ password: pw });
+    btn.disabled = false;
+    btn.textContent = 'Update Password';
+
+    if(error){ showToast('Error: ' + error.message); return; }
+    document.getElementById('changePwModal').classList.remove('show');
+    showToast('Password updated successfully');
+  });
+
+  function renderStats(){
+    const all = repairs;
+    const now = Date.now();
+    const THIRTY = 1000*60*60*24*30;
+    const last30 = all.filter(r => r.created_at && (now - new Date(r.created_at).getTime()) <= THIRTY);
+
+    // Status counts
+    const pending = all.filter(r => !r.received && !r.collected).length;
+    const active = all.filter(r => r.received && !r.collected).length;
+    const collected = all.filter(r => r.collected).length;
+
+    // Per-branch (To Branch) counts
+    const branches = ['Cape Town', 'Bellville', 'Somerset'];
+    const byBranch = branches.map(b => ({
+      branch: b,
+      total: all.filter(r => r.branch === b).length,
+      pending: all.filter(r => r.branch === b && !r.received && !r.collected).length,
+      active: all.filter(r => r.branch === b && r.received && !r.collected).length,
+      collected: all.filter(r => r.branch === b && r.collected).length,
+    }));
+
+    // Averages (hours to receive, days to collect)
+    const recTimes = all.filter(r => r.received_at && r.created_at)
+      .map(r => (new Date(r.received_at) - new Date(r.created_at)) / 3600000);
+    const avgReceive = recTimes.length ? (recTimes.reduce((a,b)=>a+b,0)/recTimes.length) : null;
+    const colTimes = all.filter(r => r.collected_at && r.received_at)
+      .map(r => (new Date(r.collected_at) - new Date(r.received_at)) / 86400000);
+    const avgCollect = colTimes.length ? (colTimes.reduce((a,b)=>a+b,0)/colTimes.length) : null;
+
+    // Overdue (received, not collected, >3 months)
+    const SIX = 1000*60*60*24*30*3;
+    const overdue = all.filter(r => r.received && !r.collected && r.received_at && (now - new Date(r.received_at).getTime()) > SIX).length;
+
+    // Special flags
+    const courier = all.filter(r => r.is_courier).length;
+    const redo = all.filter(r => r.is_redo).length;
+    const loanReturn = all.filter(r => r.is_loan_return).length;
+    const signatures = all.filter(r => r.signature_url).length;
+
+    const statCard = (num, label, color) =>
+      `<div style="background:var(--gray-bg,#f4f4f4);border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:14px;text-align:center;">
+        <div style="font-size:1.8rem;font-weight:700;color:${color||'#111'};">${num}</div>
+        <div style="font-size:0.72rem;color:var(--gray-text,#555);text-transform:uppercase;letter-spacing:0.4px;margin-top:2px;">${label}</div>
+      </div>`;
+
+    let h = '';
+
+    // Headline grid
+    h += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;">
+      ${statCard(all.length, 'Total repairs', '#1d4f8a')}
+      ${statCard(pending, 'Pending', '#5a4500')}
+      ${statCard(active, 'Active', '#1d8a3f')}
+      ${statCard(collected, 'Collected', '#1d4f8a')}
+    </div>`;
+
+    // Timing + last 30 days
+    h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">
+      ${statCard(last30.length, 'Logged (last 30 days)', '#111')}
+      ${statCard(avgReceive !== null ? avgReceive.toFixed(1) + ' hrs' : '—', 'Avg. time to receive', '#111')}
+      ${statCard(avgCollect !== null ? avgCollect.toFixed(1) + ' days' : '—', 'Avg. time to collect', '#111')}
+    </div>`;
+
+    // Per-branch table
+    h += `<h4 style="margin:18px 0 8px;font-size:0.95rem;">By branch</h4>
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead><tr style="text-align:left;color:var(--gray-text,#555);font-size:0.72rem;text-transform:uppercase;">
+          <th style="padding:6px 4px;">Branch</th><th style="padding:6px 4px;">Total</th>
+          <th style="padding:6px 4px;">Pending</th><th style="padding:6px 4px;">Active</th><th style="padding:6px 4px;">Collected</th>
+        </tr></thead><tbody>`;
+    byBranch.forEach(b => {
+      h += `<tr style="border-top:1px solid var(--gray-border,#dcdcdc);">
+        <td style="padding:7px 4px;font-weight:600;">${b.branch}</td>
+        <td style="padding:7px 4px;">${b.total}</td>
+        <td style="padding:7px 4px;">${b.pending}</td>
+        <td style="padding:7px 4px;">${b.active}</td>
+        <td style="padding:7px 4px;">${b.collected}</td>
+      </tr>`;
+    });
+    h += `</tbody></table>`;
+
+    // Flags row
+    h += `<h4 style="margin:18px 0 8px;font-size:0.95rem;">Special handling</h4>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:8px;">
+      ${statCard(courier, 'Courier', '#8a5b1d')}
+      ${statCard(redo, 'Redos', '#8a5b1d')}
+      ${statCard(loanReturn, 'Loan returns', '#1d4f8a')}
+      ${statCard(overdue, 'Overdue (3m+)', overdue > 0 ? '#c0392b' : '#111')}
+    </div>
+    <div style="font-size:0.75rem;color:var(--gray-text,#555);margin-top:12px;">${signatures} collection${signatures===1?'':'s'} captured a digital signature. Figures update live as repairs change.</div>`;
+
+    document.getElementById('statsBody').innerHTML = h;
+  }
+
+  document.getElementById('cancelAdmin').addEventListener('click', () => {
+    document.getElementById('adminModal').classList.remove('show');
+  });
+
+  document.getElementById('confirmAddUser').addEventListener('click', async () => {
+    const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
+    const password = document.getElementById('newUserPassword').value.trim();
+    const pin = document.getElementById('adminPinForUser').value.trim();
+    if(!email || !password || !pin){ showToast('Please fill in all fields'); return; }
+    const btn = document.getElementById('confirmAddUser');
+    btn.disabled = true;
+    btn.textContent = 'Adding…';
+    const { error } = await sb.rpc('admin_add_user', {
+      p_email: email,
+      p_password: password,
+      p_admin_pin: pin
+    });
+    btn.disabled = false;
+    btn.textContent = 'Add User';
+    if(error){ showToast('Error: ' + error.message); return; }
+    document.getElementById('adminModal').classList.remove('show');
+    showToast('User added — they can now log in');
+  });
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if(session && session.user && session.user.email){
+      showLoggedIn(session.user.email);
+    } else {
+      showLoggedOut();
+    }
+  });
+
+  let appStarted = false;
+  function startApp(){
+    if(appStarted) return;
+    appStarted = true;
+    initApp();
+  }
+
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2500);
+  }
+
+  function initApp(){
+
+  // Sync the branch filter buttons to whichever branch was set on login
+  document.querySelectorAll('#filters .filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === activeFilter);
+  });
+
+  // Build the search box dynamically (rather than static HTML) so browser
+  // autofill, which scans the page at load time and is known to ignore
+  // autocomplete=off for fields it heuristically matches as contact-related,
+  // does not get a chance to latch onto it. Also avoid trigger words like
+  // "name" / "contact" in the placeholder.
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.id = 'searchInput';
+  searchInput.name = 'qf-x83k2';
+  searchInput.autocomplete = 'off';
+  searchInput.setAttribute('data-lpignore', 'true');
+  searchInput.setAttribute('data-1p-ignore', 'true');
+  searchInput.setAttribute('data-form-type', 'other');
+  searchInput.placeholder = 'Search repairs…';
+  document.getElementById('searchWrap').appendChild(searchInput);
+
+  // Catch Chrome's autofill the instant it happens (see the CSS keyframe
+  // trick above) and immediately wipe it out, no matter when it fires.
+  searchInput.addEventListener('animationstart', async (e) => {
+    if(e.animationName === 'onAutoFillStart'){
+      searchInput.value = '';
+      searchQuery = '';
+      await renderTable();
+    }
+  });
+
+  document.getElementById('searchInput').addEventListener('input', async (e) => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    await renderTable();
+  });
+
+  document.getElementById('sectionToggle').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeSection = btn.dataset.section;
+    document.getElementById('activeSection').style.display = (activeSection === 'pending' || activeSection === 'active') ? 'block' : 'none';
+    document.getElementById('collectedSection').style.display = activeSection === 'collected' ? 'block' : 'none';
+    await renderTable();
+  });
+
+  const branchToggle = document.getElementById('branchToggle');
+  branchToggle.addEventListener('click', (e) => {
+    const btn = e.target.closest('.branch-btn');
+    if(!btn) return;
+    document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedBranch = btn.dataset.branch;
+    document.getElementById('branchToggle').classList.remove('invalid');
+  });
+
+  document.getElementById('filters').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+    await renderTable();
+  });
+
+  document.getElementById('collectedFilters').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.filter-btn');
+    if(!btn) return;
+    document.querySelectorAll('#collectedFilters .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    collectedFilter = btn.dataset.cfilter;
+    collectedPage = 1; // reset to first page when switching branch
+    await renderTable();
+  });
+
+  document.getElementById('collectedPrev').addEventListener('click', async () => {
+    if(collectedPage > 1){ collectedPage--; await renderTable(); }
+  });
+  document.getElementById('collectedNext').addEventListener('click', async () => {
+    collectedPage++; await renderTable(); // renderTable clamps to max page
+  });
+
+  document.getElementById('submitBtn').addEventListener('click', async () => {
+    const name = document.getElementById('name').value.trim();
+    const contact = document.getElementById('contact').value.trim();
+    const jobNumber = document.getElementById('jobNumber').value.trim();
+    const item = document.getElementById('item').value.trim();
+    const isBuyin = document.getElementById('buyinCheck').checked;
+    const stockCode = document.getElementById('stockCode').value.trim();
+    const usedGearDoc = document.getElementById('usedGearDoc').value.trim();
+
+    if(!selectedBranch){
+      showToast('Please select a branch');
+      document.getElementById('branchToggle').classList.add('invalid');
+      return;
+    }
+    document.getElementById('branchToggle').classList.remove('invalid');
+    if(!name || !jobNumber || !item){ showToast('Please fill in Name, Job Number and Item'); return; }
+    if(isBuyin && (!stockCode || !usedGearDoc)){ showToast('Please fill in the Stock Code and Used Gear Document No.'); return; }
+
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Logging…';
+
+    const { data, error } = await sb.from('repairs').insert({
+      branch: selectedBranch,
+      name: name,
+      contact_number: contact,
+      job_number: jobNumber,
+      item: item,
+      is_buyin: isBuyin,
+      stock_code: isBuyin ? stockCode : null,
+      used_gear_doc: isBuyin ? usedGearDoc : null,
+      logged_by_branch: USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown'
+    }).select().single();
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Log Repair';
+
+    if(error){
+      showToast('Error: ' + error.message);
+      return;
+    }
+
+    // Add to local array and switch to Pending so it's visible immediately
+    repairs.unshift(data);
+    activeSection = 'pending';
+    document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('#sectionToggle .filter-btn[data-section="pending"]').classList.add('active');
+    document.getElementById('activeSection').style.display = 'block';
+    document.getElementById('collectedSection').style.display = 'none';
+    await renderTable();
+
+    document.getElementById('name').value = '';
+    document.getElementById('contact').value = '';
+    document.getElementById('jobNumber').value = '';
+    document.getElementById('item').value = '';
+    document.getElementById('buyinCheck').checked = false;
+    document.getElementById('buyinFields').style.display = 'none';
+    document.getElementById('contactRow').style.display = 'block';
+    document.getElementById('stockCode').value = '';
+    document.getElementById('usedGearDoc').value = '';
+    document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
+    selectedBranch = null;
+    showToast('Repair logged');
+  });
+
+  // Buy-in tick: reveal stock/doc fields and pre-fill the standard in-house name.
+  document.getElementById('buyinCheck').addEventListener('change', (e) => {
+    document.getElementById('buyinFields').style.display = e.target.checked ? 'block' : 'none';
+    // Internal repair — no client contact number needed.
+    document.getElementById('contactRow').style.display = e.target.checked ? 'none' : 'block';
+    if(e.target.checked){
+      document.getElementById('contact').value = '';
+      const nameField = document.getElementById('name');
+      if(!nameField.value.trim()) nameField.value = 'Orms Inhouse Repair';
+    }
+  });
+
+  let pendingDisposition = null;
+
+  function openReceiveModal(id){
+    pendingReceiveId = id;
+    pendingDisposition = null;
+    document.getElementById('receivedByInput').value = '';
+    const r = repairs.find(x => x.id === id);
+    const showDisposition = !!(r && r.is_loan_return);
+    document.getElementById('loanDispositionSection').style.display = showDisposition ? 'block' : 'none';
+    document.getElementById('dispositionSupplier').classList.remove('selected');
+    document.getElementById('dispositionStore').classList.remove('selected');
+    document.getElementById('receiveModal').classList.add('show');
+  }
+  document.getElementById('dispositionSupplier').addEventListener('click', () => {
+    pendingDisposition = 'supplier';
+    document.getElementById('dispositionSupplier').classList.add('selected');
+    document.getElementById('dispositionStore').classList.remove('selected');
+  });
+  document.getElementById('dispositionStore').addEventListener('click', () => {
+    pendingDisposition = 'store';
+    document.getElementById('dispositionStore').classList.add('selected');
+    document.getElementById('dispositionSupplier').classList.remove('selected');
+  });
+  document.getElementById('cancelReceive').addEventListener('click', () => {
+    document.getElementById('receiveModal').classList.remove('show');
+    pendingReceiveId = null;
+    pendingDisposition = null;
+  });
+  document.getElementById('confirmReceive').addEventListener('click', async () => {
+    const receivedBy = document.getElementById('receivedByInput').value.trim();
+    if(!receivedBy){ showToast('Please enter your name'); return; }
+
+    const r = repairs.find(x => x.id === pendingReceiveId);
+    const needsDisposition = !!(r && r.is_loan_return);
+    if(needsDisposition && !pendingDisposition){
+      showToast('Please select Back to Supplier or Back to Store');
+      return;
+    }
+
+    const updatePayload = {
+      received: true,
+      received_by: receivedBy,
+      received_at: new Date().toISOString()
+    };
+    if(needsDisposition){
+      updatePayload.loan_return_disposition = pendingDisposition;
+    }
+
+    const { error } = await sb.from('repairs').update(updatePayload).eq('id', pendingReceiveId);
+
+    document.getElementById('receiveModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); pendingReceiveId = null; pendingDisposition = null; return; }
+    if(r){
+      r.received = true;
+      r.received_by = receivedBy;
+      r.received_at = new Date().toISOString();
+      if(needsDisposition) r.loan_return_disposition = pendingDisposition;
+      await renderTable();
+    }
+
+    showToast('Marked as received');
+    pendingReceiveId = null;
+    pendingDisposition = null;
+  });
+
+  // ---- Scan signed slip to collect ----
+  // Reads the job number off a photo of the signed slip via Google Vision OCR,
+  // matches it against loaded repairs, and (after a quick confirm) marks it
+  // collected with that photo attached. The OCR call goes browser -> Google
+  // directly, so it doesn't touch Supabase egress.
+  let scanPhotoFile = null;
+  let scanMatchedId = null;
+  let scanReadNumber = '';
+
+  // Aggressive normaliser so common OCR digit/letter confusions still match.
+  // Every job number starts "O10S" then digits, so this collapses O/0, I/1,
+  // S/5, B/8, Z/2, G/6 to compare like-for-like.
+  function normJob(s){
+    return (s||'').toUpperCase().replace(/\s+/g,'')
+      .replace(/O/g,'0').replace(/I/g,'1').replace(/S/g,'5')
+      .replace(/B/g,'8').replace(/Z/g,'2').replace(/G/g,'6');
+  }
+
+  // The slip scanner only makes sense on a phone (needs a rear camera), so
+  // only reveal the button on mobile/touch devices — keep it hidden on desktop.
+  (function revealScanIfMobile(){
+    const ua = navigator.userAgent || '';
+    const isMobileUA = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(ua);
+    const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    // Treat iPads reporting as desktop (maxTouchPoints) as mobile too.
+    if(isMobileUA || (isTouch && Math.min(window.screen.width, window.screen.height) < 900)){
+      const btn = document.getElementById('scanCollectBtn');
+      if(btn) btn.style.display = 'flex';
+    }
+  })();
+
+  document.getElementById('scanCollectBtn').addEventListener('click', () => {
+    if(typeof Tesseract === 'undefined'){
+      showToast('Scanner still loading — try again in a moment, or use search');
+      return;
+    }
+    document.getElementById('scanCollectInput').value = '';
+    document.getElementById('scanCollectInput').click();
+  });
+
+  // Lazily create one reusable on-device OCR worker. First use downloads the
+  // engine + English data from a CDN (a few MB, then cached by the browser) —
+  // this is a one-off, and it's device data, not Supabase egress. All OCR runs
+  // locally on the phone; no photo ever leaves the device for reading.
+  let ocrWorker = null;
+  async function getOcrWorker(){
+    if(ocrWorker) return ocrWorker;
+    ocrWorker = await Tesseract.createWorker('eng');
+    // Job numbers are only O, S and digits — whitelisting these greatly
+    // improves accuracy and stops the reader inventing stray letters.
+    await ocrWorker.setParameters({ tessedit_char_whitelist: 'OS0123456789' });
+    return ocrWorker;
+  }
+
+  // Crop to the top-right region (where the number always sits) before OCR —
+  // faster and far more accurate than reading the whole slip.
+  async function cropTopRight(file){
+    const TARGET_W = 1100; // downscaled working width — plenty for reading the number
+    let drawable = null, srcW = 0, srcH = 0, isBitmap = false;
+
+    // Preferred path: decode the photo already downscaled. This never holds
+    // the full-resolution bitmap in memory, which is what was crashing phones.
+    if(typeof createImageBitmap === 'function'){
+      try {
+        drawable = await createImageBitmap(file, { resizeWidth: TARGET_W, resizeQuality: 'low' });
+        srcW = drawable.width; srcH = drawable.height; isBitmap = true;
+      } catch(e){ drawable = null; }
+    }
+
+    // Fallback: load via an object URL (no giant base64 string) and downscale
+    // ourselves. Full decode happens here, but only on browsers lacking the
+    // efficient path above.
+    if(!drawable){
+      drawable = await new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed')); };
+        img.src = url;
+      });
+      srcW = drawable.naturalWidth || drawable.width;
+      srcH = drawable.naturalHeight || drawable.height;
+    }
+
+    // Crop the top-right region (where the number always is) from the
+    // already-downscaled image.
+    const cropW = Math.round(srcW * 0.55);
+    const cropH = Math.round(srcH * 0.25);
+    const sx = srcW - cropW;
+    const canvas = document.createElement('canvas');
+    canvas.width = cropW;
+    canvas.height = cropH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(drawable, sx, 0, cropW, cropH, 0, 0, cropW, cropH);
+    if(isBitmap && drawable.close) drawable.close(); // free the bitmap immediately
+    return canvas;
+  }
+
+  let scanInProgress = false;
+
+  document.getElementById('scanCollectInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    if(scanInProgress) return; // don't let a second scan pile on memory
+    scanInProgress = true;
+    scanPhotoFile = file;
+    scanMatchedId = null;
+
+    document.getElementById('scanTitle').textContent = 'Scanning slip…';
+    document.getElementById('scanStatus').innerHTML = 'Reading the job number from the photo…<br><span style="font-size:0.8rem;">(first scan may take a few seconds to load the reader)</span>';
+    document.getElementById('scanButtons').style.display = 'none';
+    document.getElementById('scanCloseOnly').style.display = 'none';
+    document.getElementById('scanModal').classList.add('show');
+
+    let cropped = null;
+    try {
+      cropped = await cropTopRight(file);
+      const worker = await getOcrWorker();
+      const { data } = await worker.recognize(cropped);
+      const text = (data && data.text) ? data.text : '';
+      // Free the crop canvas memory as soon as OCR is done
+      if(cropped){ cropped.width = 0; cropped.height = 0; cropped = null; }
+
+      // Best-effort extraction of an O10S-style number for reference/storage.
+      // Job numbers are always O10S + exactly 6 digits, so we match exactly six
+      // and stop — otherwise the reader can grab a digit from the date/page
+      // number printed right next to it. (The photo is the real record; this is
+      // just a human-readable label.)
+      scanReadNumber = '';
+      const compact = text.toUpperCase().replace(/\s+/g,'');
+      const m = compact.match(/O?10S(\d{6})/);
+      if(m) scanReadNumber = 'O10S' + m[1];
+
+      if(!text.trim()){
+        showScanError('Couldn\u2019t read a number from that photo. If this job hasn\u2019t been logged yet, you can save the slip to deal with later, or use search to collect manually.', true);
+        return;
+      }
+
+      // Match the read text against known job numbers. We check both the full
+      // normalised number and its last digits, so a near-miss read still finds
+      // the right repair. Only open (not yet collected) repairs are considered.
+      const ocrNorm = normJob(text);
+      const strong = [];
+      const loose = [];
+      for(const r of repairs){
+        if(r.collected || !r.job_number) continue;
+        const full = normJob(r.job_number);
+        if(full && ocrNorm.includes(full)){ strong.push(r); continue; }
+        const tail = full.slice(-6);
+        if(tail.length >= 5 && ocrNorm.includes(tail)) loose.push(r);
+      }
+      const candidates = strong.length ? strong : loose;
+
+      if(candidates.length === 0){
+        showScanError('No matching open repair found' + (scanReadNumber ? ' for <b>' + escapeHtml(scanReadNumber) + '</b>' : '') +
+          '. If this job hasn\u2019t been logged yet, you can save the slip to deal with later — or double-check the number and use search.', true);
+        return;
+      }
+      if(candidates.length > 1){
+        showScanError('That photo matched more than one repair (' +
+          candidates.map(c => escapeHtml(c.job_number)).join(', ') +
+          '). Please collect this one using search instead.', false);
+        return;
+      }
+
+      const r = candidates[0];
+      scanMatchedId = r.id;
+      document.getElementById('scanTitle').textContent = 'Confirm collection';
+      document.getElementById('scanStatus').innerHTML =
+        'Found this repair:<br><br>' +
+        '<b>Job:</b> ' + escapeHtml(r.job_number) + '<br>' +
+        '<b>Client:</b> ' + escapeHtml(r.name) + '<br>' +
+        '<b>Item:</b> ' + escapeHtml(r.item) + '<br>' +
+        '<b>Branch:</b> ' + escapeHtml(r.branch) +
+        '<br><br>Mark it collected and attach this photo?';
+      document.getElementById('scanButtons').style.display = 'flex';
+      document.getElementById('scanCloseOnly').style.display = 'none';
+    } catch(err){
+      showScanError('Something went wrong reading the photo. Please try a clearer, closer shot, or use search to collect manually.', true);
+    } finally {
+      if(cropped){ try { cropped.width = 0; cropped.height = 0; } catch(e){} cropped = null; }
+      scanInProgress = false;
+    }
+  });
+
+  function showScanError(msg, allowSave){
+    document.getElementById('scanTitle').textContent = 'Scan result';
+    document.getElementById('scanStatus').innerHTML = msg;
+    document.getElementById('scanButtons').style.display = 'none';
+    document.getElementById('scanCloseOnly').style.display = 'flex';
+    document.getElementById('saveUnmatchedBtn').style.display = allowSave ? 'inline-block' : 'none';
+  }
+
+  document.getElementById('closeScanOnly').addEventListener('click', () => {
+    document.getElementById('scanModal').classList.remove('show');
+    scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
+  });
+  document.getElementById('cancelScan').addEventListener('click', () => {
+    document.getElementById('scanModal').classList.remove('show');
+    scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
+  });
+
+  // Save an unmatched slip aside (photo + best-guess number) to reconcile later
+  document.getElementById('saveUnmatchedBtn').addEventListener('click', async () => {
+    if(!scanPhotoFile) return;
+    const btn = document.getElementById('saveUnmatchedBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      const compressed = await compressImage(scanPhotoFile);
+      const path = `unmatched-${Date.now()}.jpg`;
+      const { error: upErr } = await sb.storage.from('unmatched-slips').upload(path, compressed);
+      if(upErr){ btn.disabled=false; btn.textContent='Save slip for later'; showToast('Upload failed: '+upErr.message); return; }
+
+      const myEmail = document.getElementById('userEmailLabel').textContent.toLowerCase();
+      const { error: insErr } = await sb.from('unmatched_collections').insert({
+        read_number: scanReadNumber || null,
+        photo_url: path,
+        scanned_by: myEmail,
+        branch: USER_BRANCH_MAP[myEmail] || null
+      });
+      btn.disabled = false; btn.textContent = 'Save slip for later';
+      if(insErr){ showToast('Save failed: '+insErr.message); return; }
+
+      document.getElementById('scanModal').classList.remove('show');
+      scanPhotoFile = null; scanMatchedId = null; scanReadNumber = '';
+      showToast('Slip saved for later');
+    } catch(e){
+      btn.disabled = false; btn.textContent = 'Save slip for later';
+      showToast('Could not save the slip');
+    }
+  });
+
+  document.getElementById('confirmScanCollect').addEventListener('click', async () => {
+    if(!scanMatchedId || !scanPhotoFile) return;
+    const btn = document.getElementById('confirmScanCollect');
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+
+    let photoUrl = null;
+    try {
+      const compressed = await compressImage(scanPhotoFile);
+      const path = `${scanMatchedId}-${Date.now()}.jpg`;
+      const { error: upErr } = await sb.storage.from('collection-photos').upload(path, compressed);
+      if(upErr){
+        btn.disabled = false; btn.textContent = 'Mark Collected';
+        showToast('Photo upload failed: ' + upErr.message);
+        return;
+      }
+      photoUrl = path;
+    } catch(e){
+      btn.disabled = false; btn.textContent = 'Mark Collected';
+      showToast('Could not process the photo');
+      return;
+    }
+
+    const { error } = await sb.from('repairs').update({
+      collected: true,
+      collected_at: new Date().toISOString(),
+      collected_photo_url: photoUrl
+    }).eq('id', scanMatchedId);
+
+    btn.disabled = false; btn.textContent = 'Mark Collected';
+    document.getElementById('scanModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); scanMatchedId = null; scanPhotoFile = null; return; }
+
+    const r = repairs.find(x => x.id === scanMatchedId);
+    if(r){
+      r.collected = true;
+      r.collected_at = new Date().toISOString();
+      r.collected_photo_url = photoUrl;
+      await renderTable();
+    }
+    showToast('Marked as collected');
+    scanMatchedId = null; scanPhotoFile = null;
+  });
+
+  function openCollectModal(id){
+    pendingCollectId = id;
+    document.getElementById('courierCheck').checked = false;
+    document.getElementById('courierFields').style.display = 'none';
+    document.getElementById('courierAddress').value = '';
+    document.getElementById('waybillFile').value = '';
+    document.getElementById('loanReturnCheck').checked = false;
+    document.getElementById('loanReturnFields').style.display = 'none';
+    document.getElementById('loanReturnBranch').value = 'Cape Town';
+    document.getElementById('loanReturnItem').value = '';
+    // Reset the new "collected by" / "collecting at" fields.
+    document.getElementById('collectedByInput').value = '';
+    const rec = repairs.find(x => x.id === id);
+    document.getElementById('collectedBranchSelect').value = (rec && rec.branch) ? rec.branch : 'Cape Town';
+    // At the collection station, keep the modal simple: photo + signature only.
+    const courierRow = document.getElementById('courierCheckRow');
+    const loanRow = document.getElementById('loanReturnCheckRow');
+    if(courierRow) courierRow.style.display = collectionMode ? 'none' : 'flex';
+    if(loanRow) loanRow.style.display = collectionMode ? 'none' : 'flex';
+    document.getElementById('collectModal').classList.add('show');
+    // Set up the signature pad once the modal is visible (canvas needs a
+    // layout size before we can size its drawing surface correctly).
+    setTimeout(initSignaturePad, 50);
+  }
+
+  // ---- Signature pad ----
+  let sigCtx = null, sigDrawing = false, sigHasContent = false, sigInitialised = false;
+  function initSignaturePad(){
+    const canvas = document.getElementById('signaturePad');
+    if(!canvas) return;
+    // Size the canvas backing store to its displayed size for crisp lines
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    sigCtx = canvas.getContext('2d');
+    sigCtx.fillStyle = '#ffffff';
+    sigCtx.fillRect(0, 0, canvas.width, canvas.height);
+    sigCtx.strokeStyle = '#111111';
+    sigCtx.lineWidth = 2;
+    sigCtx.lineCap = 'round';
+    sigCtx.lineJoin = 'round';
+    sigHasContent = false;
+
+    if(sigInitialised) return; // only attach listeners once
+    sigInitialised = true;
+
+    function pos(e){
+      const r = canvas.getBoundingClientRect();
+      const point = e.touches ? e.touches[0] : e;
+      return { x: point.clientX - r.left, y: point.clientY - r.top };
+    }
+    function start(e){ e.preventDefault(); sigDrawing = true; const p = pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); }
+    function move(e){ if(!sigDrawing) return; e.preventDefault(); const p = pos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); sigHasContent = true; }
+    function end(e){ sigDrawing = false; }
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mouseleave', end);
+    canvas.addEventListener('touchstart', start, { passive:false });
+    canvas.addEventListener('touchmove', move, { passive:false });
+    canvas.addEventListener('touchend', end);
+  }
+  function clearSignaturePad(){
+    const canvas = document.getElementById('signaturePad');
+    if(!canvas || !sigCtx) return;
+    sigCtx.fillStyle = '#ffffff';
+    sigCtx.fillRect(0, 0, canvas.width, canvas.height);
+    sigHasContent = false;
+  }
+  document.getElementById('clearSignatureBtn').addEventListener('click', clearSignaturePad);
+
+  function getSignatureBlob(details){
+    return new Promise((resolve) => {
+      if(!sigHasContent){ resolve(null); return; }
+      const canvas = document.getElementById('signaturePad');
+      // Draw a stamp (client name, job number, date/time) directly onto the
+      // signature image so it's permanently part of the saved record and
+      // can't be separated from or mismatched with the job it belongs to.
+      // We stamp a copy so the on-screen pad isn't visibly altered.
+      const stamped = document.createElement('canvas');
+      stamped.width = canvas.width;
+      stamped.height = canvas.height;
+      const ctx = stamped.getContext('2d');
+      ctx.drawImage(canvas, 0, 0);
+
+      const line1 = (details && details.name ? details.name : '') + (details && details.job ? '  ·  Job ' + details.job : '');
+      const line2 = 'Signed: ' + new Date().toLocaleString();
+
+      ctx.font = '11px Arial';
+      ctx.textBaseline = 'bottom';
+      const w1 = line1 ? ctx.measureText(line1).width : 0;
+      const w2 = ctx.measureText(line2).width;
+      const boxW = Math.max(w1, w2) + 8;
+      const boxH = line1 ? 32 : 16;
+      // Light background strip behind the text for legibility
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillRect(4, stamped.height - boxH - 2, boxW, boxH);
+      ctx.fillStyle = '#333333';
+      if(line1){
+        ctx.fillText(line1, 8, stamped.height - 20);
+        ctx.fillStyle = '#555555';
+        ctx.fillText(line2, 8, stamped.height - 4);
+      } else {
+        ctx.fillStyle = '#555555';
+        ctx.fillText(line2, 8, stamped.height - 4);
+      }
+      stamped.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8);
+    });
+  }
+
+  document.getElementById('courierCheck').addEventListener('change', (e) => {
+    document.getElementById('courierFields').style.display = e.target.checked ? 'block' : 'none';
+  });
+  document.getElementById('loanReturnCheck').addEventListener('change', (e) => {
+    document.getElementById('loanReturnFields').style.display = e.target.checked ? 'block' : 'none';
+  });
+  document.getElementById('cancelCollect').addEventListener('click', () => {
+    document.getElementById('collectModal').classList.remove('show');
+    document.getElementById('collectPhotoInput').value = '';
+    document.getElementById('waybillFile').value = '';
+    clearSignaturePad();
+    pendingCollectId = null;
+  });
+  document.getElementById('confirmCollect').addEventListener('click', async () => {
+    const confirmBtn = document.getElementById('confirmCollect');
+    const fileInput = document.getElementById('collectPhotoInput');
+    const file = fileInput.files[0];
+    const isCourier = document.getElementById('courierCheck').checked;
+    const courierAddress = document.getElementById('courierAddress').value.trim();
+    const waybillFile = document.getElementById('waybillFile').files[0];
+    const loanReturn = document.getElementById('loanReturnCheck').checked;
+    const loanReturnBranch = document.getElementById('loanReturnBranch').value;
+    const loanReturnItem = document.getElementById('loanReturnItem').value.trim();
+    const collectedBy = document.getElementById('collectedByInput').value.trim();
+    const collectedBranch = document.getElementById('collectedBranchSelect').value;
+
+    if(isCourier && !courierAddress){ showToast('Please enter the courier address'); return; }
+    if(loanReturn && !loanReturnItem){ showToast('Please enter the loan unit item'); return; }
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = (file || waybillFile) ? 'Preparing…' : 'Saving…';
+
+    let photoUrl = null;
+    if(file){
+      const compressedFile = await compressImage(file);
+      confirmBtn.textContent = 'Uploading…';
+      const ext = compressedFile.name.split('.').pop();
+      const path = `${pendingCollectId}-${Date.now()}.${ext}`;
+      const { error: uploadError } = await sb.storage.from('collection-photos').upload(path, compressedFile);
+      if(uploadError){
+        showToast('Photo upload failed: ' + uploadError.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Mark Collected';
+        return;
+      }
+      photoUrl = path; // store path only, not public URL — we'll generate signed URLs for display
+    }
+
+    let waybillUrl = null;
+    if(isCourier && waybillFile){
+      const compressedWaybill = await compressImage(waybillFile);
+      confirmBtn.textContent = 'Uploading…';
+      const ext = compressedWaybill.name.split('.').pop();
+      const path = `${pendingCollectId}-waybill-${Date.now()}.${ext}`;
+      const { error: waybillError } = await sb.storage.from('waybills').upload(path, compressedWaybill);
+      if(waybillError){
+        showToast('Waybill upload failed: ' + waybillError.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Mark Collected';
+        return;
+      }
+      waybillUrl = path;
+    }
+
+    let signatureUrl = null;
+    const sigRecord = repairs.find(x => x.id === pendingCollectId);
+    const signatureBlob = await getSignatureBlob({
+      name: collectedBy || (sigRecord ? sigRecord.name : ''),
+      job: sigRecord ? sigRecord.job_number : ''
+    });
+    if(signatureBlob){
+      confirmBtn.textContent = 'Uploading…';
+      const path = `${pendingCollectId}-signature-${Date.now()}.jpg`;
+      const { error: sigError } = await sb.storage.from('signatures').upload(path, signatureBlob);
+      if(sigError){
+        showToast('Signature upload failed: ' + sigError.message);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Mark Collected';
+        return;
+      }
+      signatureUrl = path;
+    }
+
+    const r = repairs.find(x => x.id === pendingCollectId);
+
+    const { error } = await sb.from('repairs').update({
+      collected: true,
+      collected_at: new Date().toISOString(),
+      collected_photo_url: photoUrl,
+      signature_url: signatureUrl,
+      collected_by: collectedBy || null,
+      collected_branch: collectedBranch || null,
+      is_courier: isCourier,
+      courier_address: isCourier ? courierAddress : null,
+      waybill_url: waybillUrl,
+      loan_unit_return: loanReturn,
+      loan_return_branch: loanReturn ? loanReturnBranch : null,
+      loan_return_item: loanReturn ? loanReturnItem : null
+    }).eq('id', pendingCollectId);
+
+    if(error){
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Mark Collected';
+      showToast('Error: ' + error.message);
+      return;
+    }
+
+    // If a loan unit is being returned, auto-generate a Pending delivery
+    // at the receiving branch so it shows up on their list.
+    if(loanReturn && r){
+      const currentBranch = USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || r.branch;
+      const { data: newRow, error: loanInsertError } = await sb.from('repairs').insert({
+        branch: loanReturnBranch,
+        name: r.name,
+        contact_number: r.contact_number,
+        job_number: r.job_number,
+        item: 'Loan Return - ' + loanReturnItem,
+        logged_by_branch: currentBranch,
+        is_loan_return: true
+      }).select().single();
+      if(loanInsertError){
+        showToast('Loan return item created, but the delivery record failed: ' + loanInsertError.message);
+      } else if(newRow){
+        repairs.unshift(newRow);
+      }
+    }
+
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Mark Collected';
+    fileInput.value = '';
+    document.getElementById('waybillFile').value = '';
+    clearSignaturePad();
+    document.getElementById('collectModal').classList.remove('show');
+
+    if(r){
+      r.collected = true;
+      r.collected_at = new Date().toISOString();
+      r.collected_photo_url = photoUrl;
+      r.signature_url = signatureUrl;
+      r.collected_by = collectedBy || null;
+      r.collected_branch = collectedBranch || null;
+      r.is_courier = isCourier;
+      r.courier_address = isCourier ? courierAddress : null;
+      r.waybill_url = waybillUrl;
+      r.loan_unit_return = loanReturn;
+      r.loan_return_branch = loanReturn ? loanReturnBranch : null;
+      r.loan_return_item = loanReturn ? loanReturnItem : null;
+      await renderTable();
+    }
+
+    showToast('Marked as collected');
+    pendingCollectId = null;
+  });
+
+  // ---- Redo / Return to Origin ----
+  let pendingRedoId = null;
+  function openRedoModal(id){
+    pendingRedoId = id;
+    const r = repairs.find(x => x.id === id);
+    const origin = r ? (r.logged_by_branch || 'its origin branch') : 'its origin branch';
+    document.getElementById('redoOriginText').textContent = `This will flag the item as returned to ${origin} for redo.`;
+    document.getElementById('redoByInput').value = '';
+    document.getElementById('redoModal').classList.add('show');
+  }
+  document.getElementById('cancelRedo').addEventListener('click', () => {
+    document.getElementById('redoModal').classList.remove('show');
+    pendingRedoId = null;
+  });
+  document.getElementById('confirmRedo').addEventListener('click', async () => {
+    const redoBy = document.getElementById('redoByInput').value.trim();
+    if(!redoBy){ showToast('Please enter your name'); return; }
+
+    const { error } = await sb.from('repairs').update({
+      is_redo: true,
+      redo_returned_at: new Date().toISOString(),
+      redo_returned_by: redoBy
+    }).eq('id', pendingRedoId);
+
+    document.getElementById('redoModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); pendingRedoId = null; return; }
+
+    const r = repairs.find(x => x.id === pendingRedoId);
+    if(r){
+      r.is_redo = true;
+      r.redo_returned_at = new Date().toISOString();
+      r.redo_returned_by = redoBy;
+      await renderTable();
+    }
+
+    showToast('Marked as returned for redo');
+    pendingRedoId = null;
+  });
+
+  function openDeleteModal(id){
+    pendingDeleteId = id;
+    document.getElementById('deletePinInput').value = '';
+    document.getElementById('deleteModal').classList.add('show');
+  }
+  document.getElementById('cancelDelete').addEventListener('click', () => {
+    document.getElementById('deleteModal').classList.remove('show');
+    pendingDeleteId = null;
+  });
+  document.getElementById('confirmDelete').addEventListener('click', async () => {
+    const pin = document.getElementById('deletePinInput').value.trim();
+    if(!pin){ showToast('Please enter the PIN'); return; }
+
+    const confirmBtn = document.getElementById('confirmDelete');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Checking…';
+
+    // Verify the PIN server-side — the PIN itself is never stored in this
+    // front-end code, so it can't be read from the public GitHub source.
+    const { data: pinOk, error: pinErr } = await sb.rpc('verify_admin_pin', { p_pin: pin });
+
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Delete';
+
+    if(pinErr){ showToast('Error: ' + pinErr.message); return; }
+    if(!pinOk){ showToast('Incorrect PIN'); return; }
+
+    const { error } = await sb.from('repairs').delete().eq('id', pendingDeleteId);
+    document.getElementById('deleteModal').classList.remove('show');
+    if(error){ showToast('Error: ' + error.message); pendingDeleteId = null; return; }
+
+    repairs = repairs.filter(x => x.id !== pendingDeleteId);
+    await renderTable();
+
+    showToast('Repair deleted');
+    pendingDeleteId = null;
+  });
+
+  function matchesSearch(r){
+    if(!searchQuery) return true;
+    const haystack = [r.name, r.contact_number, r.job_number, r.item, r.stock_code, r.used_gear_doc].join(' ').toLowerCase();
+    return haystack.includes(searchQuery);
+  }
+
+  function isOverdue(r){
+    if(!r.received || r.collected || !r.received_at) return false;
+    return (Date.now() - new Date(r.received_at).getTime()) > SIX_MONTHS_MS;
+  }
+
+  let renderInProgress = false;
+  let renderPending = false;
+  const signedUrlCache = new Map(); // path -> { url, expiresAt } — avoids re-signing/re-downloading photos on every render
+
+  async function renderTable(){
+    // Prevent concurrent renders — if one is already running, flag it and return.
+    // The running render will kick off another pass when it finishes.
+    if(renderInProgress){
+      renderPending = true;
+      return;
+    }
+    renderInProgress = true;
+    renderPending = false;
+    try {
+      await _doRender();
+    } finally {
+      renderInProgress = false;
+      if(renderPending) await renderTable();
+    }
+  }
+
+  async function _doRender(){
+    const overdueCount = repairs.filter(isOverdue).length;
+    const banner = document.getElementById('overdueBanner');
+    if(overdueCount > 0){
+      banner.textContent = `⚠ ${overdueCount} repair${overdueCount > 1 ? 's have' : ' has'} been received but not collected for over 3 months.`;
+      banner.classList.add('show');
+    } else {
+      banner.classList.remove('show');
+    }
+
+    const allRows = repairs.filter(matchesSearch);
+
+    // PENDING / ACTIVE section
+    let activeRows = allRows.filter(r => !r.collected);
+    if(activeSection === 'pending'){
+      activeRows = activeRows.filter(r => !r.received);
+    } else if(activeSection === 'active'){
+      activeRows = activeRows.filter(r => r.received);
+    }
+    // apply branch filter on top
+    if(activeFilter !== 'All'){
+      activeRows = activeRows.filter(r => r.branch === activeFilter);
+    }
+
+    const body = document.getElementById('repairsBody');
+    const empty = document.getElementById('emptyState');
+    body.innerHTML = '';
+
+    if(activeRows.length === 0){
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+
+      activeRows.forEach(r => {
+        const tr = document.createElement('tr');
+
+        // Collection-station view: only Job # + Client name + a Collect button.
+        if(collectionMode){
+          tr.innerHTML =
+            '<td data-label="Job #">' + escapeHtml(r.job_number) + '</td>'
+            + '<td data-label="Name">' + escapeHtml(r.name) + '</td>'
+            + '<td data-label=""><button class="collect-btn" data-id="' + r.id + '" data-action="collect">Mark Collected</button></td>';
+          body.appendChild(tr);
+          return;
+        }
+
+        if(r.is_loan_return) tr.classList.add('loan-row');
+        const overdue = isOverdue(r);
+        let statusHtml;
+        if(r.received){
+          const receivedDate = r.received_at ? new Date(r.received_at).toLocaleString() : '';
+          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 3+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}${r.is_loan_return && r.loan_return_disposition ? `<span class="badge redo">${r.loan_return_disposition === 'supplier' ? 'Going back to Supplier' : 'Going back to Store'}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
+        } else {
+          statusHtml = `<span class="badge pending">Pending</span>`;
+        }
+
+        let actionHtml = '';
+        if(!r.received){
+          actionHtml += `<button class="receive-btn" data-id="${r.id}" data-action="receive">Mark Received</button>`;
+        } else {
+          actionHtml += `<button class="collect-btn" data-id="${r.id}" data-action="collect">Mark Collected</button>`;
+          if(!r.is_redo){
+            actionHtml += `<button class="redo-btn" data-id="${r.id}" data-action="redo">Redo — Return to Origin</button>`;
+          }
+        }
+        actionHtml += `<button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button>`;
+
+        tr.innerHTML = `
+          <td data-label="To Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
+          <td data-label="Job #">${escapeHtml(r.job_number)}</td>
+          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}</td>
+          <td data-label="Name">${escapeHtml(r.name)}</td>
+          <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
+          <td data-label="Status">${statusHtml}</td>
+          <td data-label="">${actionHtml}</td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    document.querySelectorAll('.receive-btn').forEach(btn => {
+      btn.addEventListener('click', () => openReceiveModal(btn.dataset.id));
+    });
+    document.querySelectorAll('.collect-btn').forEach(btn => {
+      btn.addEventListener('click', () => openCollectModal(btn.dataset.id));
+    });
+    document.querySelectorAll('.redo-btn').forEach(btn => {
+      btn.addEventListener('click', () => openRedoModal(btn.dataset.id));
+    });
+    document.querySelectorAll('#repairsBody .delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+    });
+
+    // COLLECTED section
+    let collectedRows = allRows.filter(r => r.collected);
+    // Filter by the branch where the item was collected (falls back to the
+    // repair's branch for older records collected before this was tracked).
+    if(collectedFilter !== 'All'){
+      collectedRows = collectedRows.filter(r => (r.collected_branch || r.branch) === collectedFilter);
+    }
+
+    const cBody = document.getElementById('collectedBody');
+    const cEmpty = document.getElementById('collectedEmptyState');
+    const cPagination = document.getElementById('collectedPagination');
+    cBody.innerHTML = '';
+
+    if(collectedRows.length === 0){
+      cEmpty.style.display = 'block';
+      cPagination.style.display = 'none';
+    } else {
+      cEmpty.style.display = 'none';
+
+      // Pagination maths
+      const totalPages = Math.max(1, Math.ceil(collectedRows.length / COLLECTED_PER_PAGE));
+      if(collectedPage > totalPages) collectedPage = totalPages;
+      if(collectedPage < 1) collectedPage = 1;
+      const startIdx = (collectedPage - 1) * COLLECTED_PER_PAGE;
+      const pageRows = collectedRows.slice(startIdx, startIdx + COLLECTED_PER_PAGE);
+
+      for(const r of pageRows){
+        const tr = document.createElement('tr');
+        const collectedDate = r.collected_at ? new Date(r.collected_at).toLocaleString() : '';
+        // Photos are never auto-loaded or pre-fetched here — that was the
+        // actual cause of the egress overuse (every logged-in browser was
+        // silently re-downloading every collected photo on every sync event).
+        // Instead we just show a link; the signed URL is only generated and
+        // the image only downloaded if someone actually clicks it.
+        const photoHtml = r.collected_photo_url
+          ? `<br><a href="#" class="view-file-link" data-file-path="${escapeHtml(r.collected_photo_url)}" data-bucket="collection-photos" data-viewer-title="${escapeHtml('Collection note — ' + r.name + ' · Job ' + r.job_number)}" style="font-size:11.5px;color:var(--accent, #1d4f8a);text-decoration:underline;">📷 Collection note available to view</a>`
+          : '';
+        const sigHtml = r.signature_url
+          ? `<br><a href="#" class="view-file-link" data-file-path="${escapeHtml(r.signature_url)}" data-bucket="signatures" data-viewer-title="${escapeHtml('Signature — ' + r.name + ' · Job ' + r.job_number)}" style="font-size:11.5px;color:var(--accent, #1d4f8a);text-decoration:underline;">✍ Signature available to view</a>`
+          : '';
+        tr.innerHTML = `
+          <td data-label="To Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
+          <td data-label="Job #">${escapeHtml(r.job_number)}</td>
+          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}</td>
+          <td data-label="Name">${escapeHtml(r.name)}</td>
+          <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
+          <td data-label="Collected"><span class="badge collected">Collected</span>${r.collected_branch ? `<br><span class="received-info">at ${escapeHtml(r.collected_branch)}${r.collected_by ? ' by ' + escapeHtml(r.collected_by) : ''}</span>` : (r.collected_by ? `<br><span class="received-info">by ${escapeHtml(r.collected_by)}</span>` : '')}<br><span class="received-info">${escapeHtml(collectedDate)}</span>${r.loan_unit_return ? `<br><span class="badge collected" style="background:#e0e7f5;color:#1d4f8a;">Loan returned → ${escapeHtml(r.loan_return_branch||'')}: ${escapeHtml(r.loan_return_item||'')}</span>` : ''}${photoHtml}${sigHtml}</td>
+          <td data-label=""><button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button></td>
+        `;
+        cBody.appendChild(tr);
+      }
+
+      // Pagination controls
+      if(collectedRows.length > COLLECTED_PER_PAGE){
+        cPagination.style.display = 'flex';
+        document.getElementById('collectedPageInfo').textContent =
+          `Page ${collectedPage} of ${totalPages}  ·  ${collectedRows.length} items`;
+        document.getElementById('collectedPrev').disabled = (collectedPage <= 1);
+        document.getElementById('collectedNext').disabled = (collectedPage >= totalPages);
+        document.getElementById('collectedPrev').style.opacity = (collectedPage <= 1) ? '0.4' : '1';
+        document.getElementById('collectedNext').style.opacity = (collectedPage >= totalPages) ? '0.4' : '1';
+      } else {
+        cPagination.style.display = 'none';
+      }
+    }
+    wireCollectedDeleteButtons();
+    wireViewFileLinks();
+  } // end _doRender
+
+  async function openStorageFile(path, bucket, linkEl, title){
+    const originalText = linkEl.textContent;
+    linkEl.textContent = 'Loading…';
+
+    // Show the modal immediately with a loading state
+    document.getElementById('viewerTitle').textContent = title || 'Preview';
+    document.getElementById('viewerBody').innerHTML = '<span style="color:var(--gray-text);font-size:0.85rem;">Loading…</span>';
+    document.getElementById('viewerModal').classList.add('show');
+
+    const isPath = !path.startsWith('http');
+    const cacheKey = bucket + ':' + path;
+    const cached = signedUrlCache.get(cacheKey);
+    let signedUrl = null;
+    if(cached && cached.expiresAt > Date.now()){
+      signedUrl = cached.url;
+    } else if(isPath){
+      const { data } = await sb.storage.from(bucket).createSignedUrl(path, 3600);
+      signedUrl = data?.signedUrl;
+    } else {
+      // Legacy: extract path from an old full public URL and sign it
+      const parts = path.split('/' + bucket + '/');
+      if(parts[1]){
+        const { data } = await sb.storage.from(bucket).createSignedUrl(parts[1], 3600);
+        signedUrl = data?.signedUrl;
+      }
+    }
+
+    linkEl.textContent = originalText;
+
+    if(signedUrl){
+      signedUrlCache.set(cacheKey, { url: signedUrl, expiresAt: Date.now() + 55*60*1000 });
+      const isPdf = /\.pdf(\?|$)/i.test(path);
+      const body = document.getElementById('viewerBody');
+      if(isPdf){
+        body.innerHTML = `<div style="text-align:center;"><p style="font-size:0.85rem;color:var(--gray-text);margin-bottom:10px;">PDF document</p><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener" style="color:var(--accent, #1d4f8a);text-decoration:underline;">Open PDF in new tab</a></div>`;
+      } else {
+        body.innerHTML = `<img src="${escapeHtml(signedUrl)}" alt="Preview" style="max-width:100%;max-height:60vh;border-radius:6px;border:1px solid var(--gray-border);">`;
+      }
+    } else {
+      document.getElementById('viewerModal').classList.remove('show');
+      showToast('Could not load the file — please try again');
+    }
+  }
+
+  document.getElementById('closeViewer').addEventListener('click', () => {
+    document.getElementById('viewerModal').classList.remove('show');
+    document.getElementById('viewerBody').innerHTML = '';
+  });
+  document.getElementById('viewerModal').addEventListener('click', (e) => {
+    // Close when clicking the dark overlay outside the modal box
+    if(e.target === document.getElementById('viewerModal')){
+      document.getElementById('viewerModal').classList.remove('show');
+      document.getElementById('viewerBody').innerHTML = '';
+    }
+  });
+
+  function wireViewFileLinks(){
+    document.querySelectorAll('.view-file-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        openStorageFile(link.dataset.filePath, link.dataset.bucket, link, link.dataset.viewerTitle);
+      });
+    });
+  }
+
+  function wireCollectedDeleteButtons(){
+    document.querySelectorAll('#collectedBody .delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+    });
+  }
+
+  // Resize/compress an image file before upload so it never exceeds roughly
+  // A4-page dimensions (1240x1754 at ~150dpi) and re-encodes it as a
+  // reasonable-quality JPEG. This is what keeps photo uploads — and the
+  // repeated downloads of them — from eating through the storage/egress
+  // quota. Non-image files (e.g. PDF waybills) are returned untouched.
+  function compressImage(file, maxDimension = 1240, quality = 0.8){
+    return new Promise((resolve) => {
+      if(!file.type || !file.type.startsWith('image/')){
+        resolve(file); // not an image (e.g. PDF) — leave as-is
+        return;
+      }
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = (e) => { img.src = e.target.result; };
+      reader.onerror = () => resolve(file); // fall back to original on any read error
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > maxDimension || height > maxDimension){
+          if(width >= height){
+            height = Math.round(height * (maxDimension / width));
+            width = maxDimension;
+          } else {
+            width = Math.round(width * (maxDimension / height));
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if(!blob){ resolve(file); return; }
+          const compressedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+          resolve(compressedFile);
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => resolve(file); // fall back to original if it can't be decoded
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function escapeHtml(str){
+    // Pure string escaping — no DOM element created, so it can never stall.
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  let loadRequestSeq = 0;
+
+  async function loadRepairs(){
+    const seq = ++loadRequestSeq;
+    const { data, error } = await sb.from('repairs').select('*').order('created_at', { ascending: false });
+    if(seq !== loadRequestSeq) return; // a newer request has since started/finished, ignore this stale one
+    if(error){ showToast('Load error: ' + error.message); return; }
+    repairs = data;
+    await renderTable();
+    if(document.getElementById('statsModal').classList.contains('show')){
+      renderStats();
+    }
+  }
+
+  // Apply a single realtime change to the local list WITHOUT re-downloading
+  // the whole table. This is the main egress saver: previously every change
+  // by anyone caused all logged-in browsers to re-fetch all rows. Now we just
+  // patch the one affected row from the event payload (which we already
+  // received for free over the realtime channel).
+  async function applyRealtimeChange(payload){
+    try {
+      if(payload.eventType === 'INSERT'){
+        if(!repairs.some(r => r.id === payload.new.id)){
+          repairs.unshift(payload.new);
+        }
+      } else if(payload.eventType === 'UPDATE'){
+        const idx = repairs.findIndex(r => r.id === payload.new.id);
+        if(idx !== -1) repairs[idx] = payload.new;
+        else repairs.unshift(payload.new);
+      } else if(payload.eventType === 'DELETE'){
+        repairs = repairs.filter(r => r.id !== payload.old.id);
+      }
+      // Keep newest-first ordering consistent with the initial load
+      repairs.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      await renderTable();
+      if(document.getElementById('statsModal').classList.contains('show')){
+        renderStats();
+      }
+    } catch(e){
+      // If anything unexpected happens, fall back to a full reload
+      await loadRepairs();
+    }
+  }
+
+  sb.channel('repairs-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, async (payload) => {
+      await applyRealtimeChange(payload);
+    })
+    .subscribe((status) => {
+      const el = document.getElementById('connStatus');
+      if(status === 'SUBSCRIBED'){
+        el.textContent = '● live';
+        el.style.color = '#6fcf8a';
+      } else if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED'){
+        el.textContent = '● offline';
+        el.style.color = '#f0a8a8';
+      } else {
+        el.textContent = '● connecting…';
+        el.style.color = '#bbb';
+      }
+    });
+
+  loadRepairs();
+
+  // Defensive: some browsers restore or autofill form field values on page
+  // load/tab-restore regardless of the autocomplete attribute. The search
+  // box should always start empty, so force-clear it now and shortly after,
+  // since browser autofill can happen slightly after our own script runs.
+  async function forceClearSearch(){
+    const input = document.getElementById('searchInput');
+    if(input && input.value !== ''){
+      input.value = '';
+      searchQuery = '';
+      await renderTable();
+    }
+  }
+  forceClearSearch();
+  window.addEventListener('load', forceClearSearch);
+  window.addEventListener('pageshow', forceClearSearch);
+  for(let i = 1; i <= 20; i++){
+    setTimeout(forceClearSearch, i * 150); // poll every 150ms for ~3 seconds
+  }
+  } // end initApp
+</script>
+
+</body>
+</html>
