@@ -1,9 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- build:2026-08-14-cachefix -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<script>
+  // Self-heal: if a stale service worker is pinning an old cached copy of this
+  // page, unregister it and drop its caches so the newest code always loads.
+  (function(){
+    try {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs){
+          regs.forEach(function(r){
+            if (location.href.indexOf(r.scope) === 0) r.unregister();
+          });
+        }).catch(function(){});
+      }
+      if (window.caches && caches.keys) {
+        caches.keys().then(function(keys){
+          keys.forEach(function(k){ if (/repair/i.test(k)) caches.delete(k); });
+        }).catch(function(){});
+      }
+    } catch(e){}
+  })();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ORMS Repair Tracker</title>
@@ -904,6 +925,11 @@
   async function loadUnmatched(){
     const body = document.getElementById('unmatchedBody');
     if(!body) return;
+    // Local escaping — self-contained so this never depends on an out-of-scope helper.
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
     body.innerHTML = '<p style="color:var(--gray-text);font-size:0.85rem;">Loading…</p>';
 
     let data = null, error = null;
@@ -915,7 +941,7 @@
     }
 
     if(error){
-      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load: ' + escapeHtml(String(error.message||'unknown')) +
+      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load: ' + esc(error.message||'unknown') +
         '</p><button id="retryUnmatched" style="margin-top:8px;padding:6px 14px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;cursor:pointer;">Try again</button>';
       const rb = document.getElementById('retryUnmatched');
       if(rb) rb.addEventListener('click', loadUnmatched);
@@ -926,50 +952,48 @@
       return;
     }
 
-    try {
-      data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-      let h = '';
-      for(let i = 0; i < data.length; i++){
-        const u = data[i] || {};
-        const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
-        const rn = u.read_number ? escapeHtml(u.read_number) : '(number not read)';
-        const br = escapeHtml(u.branch || '—');
-        const by = escapeHtml(u.scanned_by || '');
-        const wh = escapeHtml(when);
-        const pid = escapeHtml(String(u.id || ''));
-        const ppath = escapeHtml(u.photo_url || '');
-        const ptitle = escapeHtml('Unmatched slip ' + (u.read_number || ''));
-        const photoLink = u.photo_url
-          ? '<a href="#" class="view-file-link" data-file-path="' + ppath + '" data-bucket="unmatched-slips" data-viewer-title="' + ptitle + '" style="font-size:0.8rem;color:var(--accent,#1d4f8a);text-decoration:underline;">📷 View slip</a>'
-          : '';
-        h += '<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">'
-          + '<div style="font-weight:600;">' + rn + '</div>'
-          + '<div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">' + br + ' &middot; ' + by + ' &middot; ' + wh + '</div>'
-          + '<div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">'
-          + photoLink
-          + '<button class="unmatched-remove" data-id="' + pid + '" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>'
-          + '</div></div>';
-      }
-      body.innerHTML = h;
-    } catch(buildErr){
-      body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t display: ' +
-        escapeHtml(String((buildErr && buildErr.message) || buildErr)) + '</p>';
-      return;
+    data.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    let h = '';
+    for(let i = 0; i < data.length; i++){
+      const u = data[i] || {};
+      const when = u.created_at ? new Date(u.created_at).toLocaleString() : '';
+      const rn = u.read_number ? esc(u.read_number) : '(number not read)';
+      const photoBtn = u.photo_url
+        ? '<button class="unmatched-view" data-path="' + esc(u.photo_url) + '" style="font-size:0.8rem;color:#1d4f8a;background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;">📷 View slip</button>'
+        : '';
+      h += '<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">'
+        + '<div style="font-weight:600;">' + rn + '</div>'
+        + '<div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">' + esc(u.branch||'—') + ' &middot; ' + esc(u.scanned_by||'') + ' &middot; ' + esc(when) + '</div>'
+        + '<div style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">'
+        + photoBtn
+        + '<button class="unmatched-remove" data-id="' + esc(String(u.id||'')) + '" style="font-size:0.78rem;padding:4px 10px;background:transparent;border:1px solid #c0392b;color:#c0392b;border-radius:5px;cursor:pointer;">Remove</button>'
+        + '</div></div>';
     }
+    body.innerHTML = h;
 
-    try {
-      wireViewFileLinks();
-      const removeBtns = document.querySelectorAll('.unmatched-remove');
-      for(let i = 0; i < removeBtns.length; i++){
-        removeBtns[i].addEventListener('click', async (ev) => {
-          const btn = ev.currentTarget;
-          btn.disabled = true; btn.textContent = 'Removing…';
-          const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
-          if(delErr){ btn.disabled=false; btn.textContent='Remove'; showToast('Error: '+delErr.message); return; }
-          loadUnmatched();
-        });
-      }
-    } catch(wireErr){ /* list already visible; wiring is non-critical */ }
+    // View slip — sign the URL with sb (in scope) and open it in a new tab.
+    body.querySelectorAll('.unmatched-view').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Opening…';
+        try {
+          const { data: signed, error: sErr } = await sb.storage.from('unmatched-slips').createSignedUrl(btn.dataset.path, 3600);
+          if(sErr || !signed){ btn.textContent = 'Error'; return; }
+          window.open(signed.signedUrl, '_blank');
+          btn.textContent = orig; btn.disabled = false;
+        } catch(e){ btn.textContent = 'Error'; }
+      });
+    });
+
+    // Remove — mark handled with sb (in scope), then refresh the list.
+    body.querySelectorAll('.unmatched-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true; btn.textContent = 'Removing…';
+        const { error: delErr } = await sb.from('unmatched_collections').update({ handled: true }).eq('id', btn.dataset.id);
+        if(delErr){ btn.disabled = false; btn.textContent = 'Remove'; return; }
+        loadUnmatched();
+      });
+    });
   }
 
   document.getElementById('changePwBtn').addEventListener('click', () => {
