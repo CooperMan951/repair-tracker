@@ -927,11 +927,6 @@
     }
   });
 
-  document.getElementById('closeJourney').addEventListener('click', closeJourney);
-  document.getElementById('journeyModal').addEventListener('click', (e) => {
-    if(e.target === document.getElementById('journeyModal')) closeJourney();
-  });
-
   document.getElementById('unmatchedBtn').addEventListener('click', () => {
     document.getElementById('unmatchedModal').classList.add('show');
     loadUnmatched();
@@ -2189,7 +2184,14 @@
   }
 
   let journeyRepairId = null;
-  function openJourney(id){ journeyRepairId = id; renderJourney(); document.getElementById('journeyModal').classList.add('show'); }
+  function openJourney(id){
+    journeyRepairId = id;
+    const modal = document.getElementById('journeyModal');
+    document.getElementById('closeJourney').onclick = closeJourney;
+    modal.onclick = (e) => { if(e.target === modal) closeJourney(); };
+    renderJourney();
+    modal.classList.add('show');
+  }
   function closeJourney(){ document.getElementById('journeyModal').classList.remove('show'); journeyRepairId = null; }
 
   function renderJourney(){
