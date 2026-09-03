@@ -517,7 +517,7 @@
             <th>Item</th>
             <th>Name</th>
             <th>Contact</th>
-            <th>Status</th>
+            <th>Stage</th>
             <th></th>
           </tr>
         </thead>
@@ -755,6 +755,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="journeyModal">
+  <div class="modal" style="max-width:520px;max-height:88vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <h3 style="margin:0;">Repair Journey</h3>
+      <button class="cancel" id="closeJourney" style="padding:5px 12px;">Close</button>
+    </div>
+    <div id="journeySub" style="font-size:0.85rem;color:var(--gray-text);margin-bottom:12px;"></div>
+    <div id="journeyTimeline"></div>
+    <div id="journeyActions" style="margin-top:16px;display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
+</div>
+
 <script>
   const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
@@ -915,6 +927,11 @@
     }
   });
 
+  document.getElementById('closeJourney').addEventListener('click', closeJourney);
+  document.getElementById('journeyModal').addEventListener('click', (e) => {
+    if(e.target === document.getElementById('journeyModal')) closeJourney();
+  });
+
   document.getElementById('unmatchedBtn').addEventListener('click', () => {
     document.getElementById('unmatchedModal').classList.add('show');
     loadUnmatched();
@@ -1039,7 +1056,7 @@
 
         // Mark the repair collected.
         const { error: upErr } = await sb.from('repairs')
-          .update({ collected: true, collected_at: new Date().toISOString() })
+          .update({ collected: true, collected_at: new Date().toISOString(), stage: 'collected' })
           .eq('id', target.id);
         if(upErr){
           if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Error: ' + upErr.message; }
@@ -1340,6 +1357,10 @@
     submitBtn.disabled = true;
     submitBtn.textContent = 'Logging…';
 
+    const loggerBranch = USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown';
+    const willTransit = selectedBranch !== loggerBranch;
+    const nowIso = new Date().toISOString();
+
     const { data, error } = await sb.from('repairs').insert({
       branch: selectedBranch,
       name: name,
@@ -1349,7 +1370,10 @@
       is_buyin: isBuyin,
       stock_code: isBuyin ? stockCode : null,
       used_gear_doc: isBuyin ? usedGearDoc : null,
-      logged_by_branch: USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown'
+      logged_by_branch: loggerBranch,
+      logged_by_name: currentUserName(),
+      stage: willTransit ? 'in_transit' : 'logged',
+      transit_at: willTransit ? nowIso : null
     }).select().single();
 
     submitBtn.disabled = false;
@@ -1760,7 +1784,8 @@
     const { error } = await sb.from('repairs').update({
       collected: true,
       collected_at: new Date().toISOString(),
-      collected_photo_url: photoUrl
+      collected_photo_url: photoUrl,
+      stage: 'collected'
     }).eq('id', scanMatchedId);
 
     btn.disabled = false; btn.textContent = 'Mark Collected';
@@ -1769,7 +1794,7 @@
 
     const r = repairs.find(x => x.id === scanMatchedId);
     if(r){
-      r.collected = true;
+      r.collected = true; r.stage = "collected";
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
       await renderTable();
@@ -1981,6 +2006,7 @@
       signature_url: signatureUrl,
       collected_by: collectedBy || null,
       collected_branch: collectedBranch || null,
+      stage: 'collected',
       is_courier: isCourier,
       courier_address: isCourier ? courierAddress : null,
       waybill_url: waybillUrl,
@@ -2024,7 +2050,7 @@
     document.getElementById('collectModal').classList.remove('show');
 
     if(r){
-      r.collected = true;
+      r.collected = true; r.stage = "collected";
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
       r.signature_url = signatureUrl;
@@ -2131,7 +2157,198 @@
     return (Date.now() - new Date(r.received_at).getTime()) > SIX_MONTHS_MS;
   }
 
-  let renderInProgress = false;
+  // ===== Stage Journey =====
+  const STAGE_LABELS = {
+    logged:'Logged', in_transit:'In Transit to Cape Town', received:'Received in Cape Town',
+    with_tech:'With Technician', repair_done:'Repair Done',
+    in_transit_back:'In Transit back', return_received:'Received at branch', collected:'Collected'
+  };
+  function displayNameFromEmail(email){
+    const p = (email||'').split('@')[0];
+    const n = p.split(/[._]/).filter(Boolean).map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+    return n || email || '';
+  }
+  function currentUserName(){
+    return displayNameFromEmail(document.getElementById('userEmailLabel').textContent);
+  }
+  function needsTransit(r){
+    return (r.branch||'') !== (r.logged_by_branch||'');
+  }
+  function stageBadge(r){
+    const s = r.stage || (r.collected ? 'collected' : (r.received ? 'received' : 'logged'));
+    const label = STAGE_LABELS[s] || s;
+    let bg = '#eceff4', fg = '#3a4658';
+    if(s === 'collected'){ bg = '#e0f2e9'; fg = '#1d7a44'; }
+    else if(s === 'in_transit' || s === 'in_transit_back'){ bg = '#fdf0d5'; fg = '#9a6b00'; }
+    else if(s === 'with_tech' || s === 'repair_done'){ bg = '#e7eefc'; fg = '#1d4f8a'; }
+    else if(s === 'received' || s === 'return_received'){ bg = '#eef4ec'; fg = '#3a6b3a'; }
+    let extra = '';
+    if(r.quoted_at) extra += '<span style="font-size:0.66rem;color:#1d4f8a;margin-left:4px;">quoted</span>';
+    if(r.paid_at) extra += '<span style="font-size:0.66rem;color:#1d7a44;margin-left:4px;">paid</span>';
+    return '<span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:10px;background:'+bg+';color:'+fg+';">'+escapeHtml(label)+'</span>' + extra;
+  }
+
+  let journeyRepairId = null;
+  function openJourney(id){ journeyRepairId = id; renderJourney(); document.getElementById('journeyModal').classList.add('show'); }
+  function closeJourney(){ document.getElementById('journeyModal').classList.remove('show'); journeyRepairId = null; }
+
+  function renderJourney(){
+    const r = repairs.find(x => x.id === journeyRepairId);
+    if(!r) return;
+    document.getElementById('journeySub').innerHTML =
+      '<b>' + escapeHtml(r.job_number) + '</b> &middot; ' + escapeHtml(r.name) + ' &middot; ' + escapeHtml(r.item) +
+      (r.is_buyin ? ' <span style="color:#2c6e2c;">(Buy-in)</span>' : '');
+    const fmt = (t) => t ? new Date(t).toLocaleString() : '';
+    const step = (done, label, detail) =>
+      '<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #f1f1f1;">'
+      + '<span style="font-size:0.95rem;line-height:1.3;">' + (done ? '✅' : '⬜') + '</span>'
+      + '<div style="flex:1;"><div style="font-weight:600;font-size:0.85rem;color:' + (done ? '#222' : '#999') + ';">' + escapeHtml(label) + '</div>'
+      + (detail ? '<div style="font-size:0.75rem;color:var(--gray-text);margin-top:1px;">' + detail + '</div>' : '') + '</div></div>';
+
+    const rows = [];
+    rows.push(step(true, 'Logged', (r.logged_by_name ? escapeHtml(r.logged_by_name) : (r.logged_by_branch||'')) + (r.created_at ? ' &middot; ' + fmt(r.created_at) : '')));
+    if(needsTransit(r)){
+      rows.push(step(!!(r.transit_at || r.received_at || r.received), 'In Transit to Cape Town', fmt(r.transit_at)));
+      rows.push(step(!!r.received_at, 'Received in Cape Town', r.received_at ? escapeHtml(r.received_by||'') + ' &middot; ' + fmt(r.received_at) : ''));
+    }
+    rows.push(step(!!r.with_tech_at, 'With Technician', fmt(r.with_tech_at)));
+    rows.push(step(!!r.quoted_at, 'Client Quoted (optional)', r.quoted_at ? fmt(r.quoted_at) + (r.quote_url ? ' &middot; quote attached' : '') : ''));
+    rows.push(step(!!r.paid_at, 'Client Paid (optional)', fmt(r.paid_at)));
+    rows.push(step(!!r.repair_done_at, 'Repair Done', fmt(r.repair_done_at)));
+    if(needsTransit(r) && (r.transit_back_at || r.return_received_at)){
+      rows.push(step(!!r.transit_back_at, 'In Transit back', fmt(r.transit_back_at)));
+      rows.push(step(!!r.return_received_at, 'Received at branch', r.return_received_at ? escapeHtml(r.return_received_by||'') + ' &middot; ' + fmt(r.return_received_at) : ''));
+    }
+    rows.push(step(!!r.collected, 'Client Collects', r.collected_at ? escapeHtml(r.collected_by||'') + ' &middot; ' + fmt(r.collected_at) + (r.collected_branch ? ' &middot; at ' + escapeHtml(r.collected_branch) : '') : ''));
+    document.getElementById('journeyTimeline').innerHTML = rows.join('');
+    renderJourneyActions(r);
+  }
+
+  function jBtn(label, style){
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.style.cssText = 'padding:11px;border:none;border-radius:6px;font-size:0.9rem;cursor:pointer;font-family:inherit;' + (style || 'background:#1d8a3f;color:#fff;');
+    return b;
+  }
+
+  function renderJourneyActions(r){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    if(r.collected){
+      box.innerHTML = '<div style="font-size:0.85rem;color:#1d7a44;font-weight:600;">✓ Complete — collected.</div>';
+      return;
+    }
+    const now = () => new Date().toISOString();
+
+    // 1) In transit → receive in Cape Town
+    if(needsTransit(r) && !r.received_at){
+      const b = jBtn('Mark Received in Cape Town');
+      b.onclick = () => captureName(r, 'received'); box.appendChild(b); return;
+    }
+    // 2) At workshop → with technician
+    if(!r.with_tech_at){
+      const b = jBtn('With Technician');
+      b.onclick = () => applyStage(r, { stage:'with_tech', with_tech_at:now(), with_tech_by:currentUserName() });
+      box.appendChild(b); return;
+    }
+    // 3) In workshop → optional quote/paid + repair done
+    if(!r.repair_done_at){
+      if(!r.quoted_at){ const q = jBtn('Add Client Quote', 'background:#e7eefc;color:#1d4f8a;'); q.onclick = () => quoteFlow(r); box.appendChild(q); }
+      else { const q = jBtn('View Quote', 'background:#eef;color:#334;'); q.onclick = () => viewQuote(r); box.appendChild(q); }
+      if(!r.paid_at){ const p = jBtn('Mark Client Paid', 'background:#e7eefc;color:#1d4f8a;'); p.onclick = () => applyStage(r, { paid_at:now() }); box.appendChild(p); }
+      const d = jBtn('Repair Done'); d.onclick = () => applyStage(r, { stage:'repair_done', repair_done_at:now() }); box.appendChild(d);
+      return;
+    }
+    // 4) Repair done → send back (if from another branch) or collect / courier here
+    if(needsTransit(r) && !r.return_received_at){
+      if(!r.transit_back_at){
+        const s1 = jBtn('Send Back to ' + (r.logged_by_branch || 'branch'));
+        s1.onclick = () => applyStage(r, { stage:'in_transit_back', transit_back_at:now() });
+        box.appendChild(s1);
+        const s2 = jBtn('Collect / Courier from Cape Town', 'background:#444;color:#fff;');
+        s2.onclick = () => { closeJourney(); openCollectModal(r.id); };
+        box.appendChild(s2);
+      } else {
+        const rb = jBtn('Mark Received at ' + (r.logged_by_branch || 'branch'));
+        rb.onclick = () => captureName(r, 'return_received');
+        box.appendChild(rb);
+      }
+      return;
+    }
+    // 5) Ready for collection
+    const c = jBtn('Collect');
+    c.onclick = () => { closeJourney(); openCollectModal(r.id); };
+    box.appendChild(c);
+  }
+
+  function captureName(r, kind){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:0.85rem;font-weight:600;';
+    label.textContent = kind === 'received' ? 'Received in Cape Town by:' : 'Received at ' + (r.logged_by_branch || 'branch') + ' by:';
+    box.appendChild(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.value = currentUserName();
+    inp.style.cssText = 'padding:10px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;';
+    box.appendChild(inp);
+    const b = jBtn('Confirm');
+    b.onclick = () => {
+      const name = (inp.value || '').trim() || currentUserName();
+      const now = new Date().toISOString();
+      const patch = kind === 'received'
+        ? { stage:'received', received:true, received_at:now, received_by:name }
+        : { stage:'return_received', return_received_at:now, return_received_by:name };
+      b.disabled = true; b.textContent = 'Saving…';
+      applyStage(r, patch);
+    };
+    box.appendChild(b);
+  }
+
+  function quoteFlow(r){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:0.85rem;font-weight:600;';
+    label.textContent = 'Attach a copy of the quote (optional), then mark quoted:';
+    box.appendChild(label);
+    const file = document.createElement('input');
+    file.type = 'file'; file.accept = 'image/*,.pdf';
+    box.appendChild(file);
+    const b = jBtn('Mark Quoted');
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Saving…';
+      const patch = { quoted_at: new Date().toISOString() };
+      if(file.files && file.files[0]){
+        try {
+          const f = file.files[0];
+          const path = r.id + '-quote-' + Date.now() + (f.type.indexOf('pdf') >= 0 ? '.pdf' : '.jpg');
+          const { error: upErr } = await sb.storage.from('waybills').upload(path, f);
+          if(!upErr) patch.quote_url = path;
+        } catch(e){}
+      }
+      applyStage(r, patch);
+    };
+    box.appendChild(b);
+  }
+
+  async function viewQuote(r){
+    if(!r.quote_url) return;
+    try {
+      const { data: signed } = await sb.storage.from('waybills').createSignedUrl(r.quote_url, 3600);
+      if(signed) window.open(signed.signedUrl, '_blank');
+    } catch(e){}
+  }
+
+  async function applyStage(r, patch){
+    const { error } = await sb.from('repairs').update(patch).eq('id', r.id);
+    if(error){ showToast('Error: ' + error.message); renderJourney(); return; }
+    Object.assign(r, patch);
+    renderJourney();
+    renderTable();
+  }
+
+
   let renderPending = false;
   const signedUrlCache = new Map(); // path -> { url, expiresAt } — avoids re-signing/re-downloading photos on every render
 
@@ -2200,23 +2417,11 @@
 
         if(r.is_loan_return) tr.classList.add('loan-row');
         const overdue = isOverdue(r);
-        let statusHtml;
-        if(r.received){
-          const receivedDate = r.received_at ? new Date(r.received_at).toLocaleString() : '';
-          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 3+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}${r.is_loan_return && r.loan_return_disposition ? `<span class="badge redo">${r.loan_return_disposition === 'supplier' ? 'Going back to Supplier' : 'Going back to Store'}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
-        } else {
-          statusHtml = `<span class="badge pending">Pending</span>`;
-        }
+        let statusHtml = stageBadge(r);
+        if(overdue) statusHtml += '<br><span class="badge overdue">Not collected 3+ months</span>';
+        if(r.is_redo) statusHtml += `<br><span class="badge redo">Redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>`;
 
-        let actionHtml = '';
-        if(!r.received){
-          actionHtml += `<button class="receive-btn" data-id="${r.id}" data-action="receive">Mark Received</button>`;
-        } else {
-          actionHtml += `<button class="collect-btn" data-id="${r.id}" data-action="collect">Mark Collected</button>`;
-          if(!r.is_redo){
-            actionHtml += `<button class="redo-btn" data-id="${r.id}" data-action="redo">Redo — Return to Origin</button>`;
-          }
-        }
+        let actionHtml = `<button class="journey-btn" data-id="${r.id}" style="background:#1d4f8a;color:#fff;border:none;border-radius:5px;padding:7px 12px;font-size:0.82rem;cursor:pointer;font-family:inherit;">Update ▸</button>`;
         actionHtml += `<button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button>`;
 
         tr.innerHTML = `
@@ -2226,13 +2431,16 @@
           <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
-          <td data-label="Status">${statusHtml}</td>
+          <td data-label="Stage">${statusHtml}</td>
           <td data-label="">${actionHtml}</td>
         `;
         body.appendChild(tr);
       });
     }
 
+    document.querySelectorAll('.journey-btn').forEach(btn => {
+      btn.addEventListener('click', () => openJourney(btn.dataset.id));
+    });
     document.querySelectorAll('.receive-btn').forEach(btn => {
       btn.addEventListener('click', () => openReceiveModal(btn.dataset.id));
     });
