@@ -480,7 +480,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v2</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v3</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -2175,9 +2175,24 @@
   function needsTransit(r){
     return (r.branch||'') !== (r.logged_by_branch||'');
   }
+  // Which Pending/Active tab a repair belongs in, based on its stage.
+  function tabOf(r){
+    if(r.collected) return 'collected';
+    const s = r.stage || (r.received ? 'received' : 'logged');
+    if(s === 'logged' || s === 'in_transit' || s === 'in_transit_back') return 'pending';
+    return 'active';
+  }
+  // Which branch a repair is "at"/heading to right now (for branch filtering).
+  function relevantBranch(r){
+    const s = r.stage || '';
+    if(s === 'in_transit_back' || s === 'return_received') return r.return_branch || r.logged_by_branch || r.branch;
+    return r.branch;
+  }
   function stageBadge(r){
     const s = r.stage || (r.collected ? 'collected' : (r.received ? 'received' : 'logged'));
-    const label = STAGE_LABELS[s] || s;
+    let label = STAGE_LABELS[s] || s;
+    if(s === 'in_transit_back' && r.return_branch) label = 'In Transit to ' + r.return_branch;
+    if(s === 'return_received' && r.return_branch) label = 'At ' + r.return_branch + ' — ready to collect';
     let bg = '#eceff4', fg = '#3a4658';
     if(s === 'collected'){ bg = '#e0f2e9'; fg = '#1d7a44'; }
     else if(s === 'in_transit' || s === 'in_transit_back'){ bg = '#fdf0d5'; fg = '#9a6b00'; }
@@ -2219,7 +2234,7 @@
       rows.push(step(!!(r.transit_at || r.received_at || r.received), 'In Transit to Cape Town', fmt(r.transit_at)));
       rows.push(step(!!r.received_at, 'Received in Cape Town', r.received_at ? escapeHtml(r.received_by||'') + ' &middot; ' + fmt(r.received_at) : ''));
     }
-    rows.push(step(!!r.with_tech_at, 'With Technician', fmt(r.with_tech_at)));
+    rows.push(step(!!r.with_tech_at, 'With Technician', r.with_tech_at ? (r.with_tech_by ? escapeHtml(r.with_tech_by) + ' &middot; ' : '') + fmt(r.with_tech_at) : ''));
     rows.push(step(!!r.quoted_at, 'Client Quoted (optional)', r.quoted_at ? fmt(r.quoted_at) + (r.quote_url ? ' &middot; quote attached' : '') : ''));
     rows.push(step(!!r.paid_at, 'Client Paid (optional)', fmt(r.paid_at)));
     rows.push(step(!!r.repair_done_at, 'Repair Done', fmt(r.repair_done_at)));
@@ -2253,11 +2268,10 @@
       const b = jBtn('Mark Received in Cape Town');
       b.onclick = () => captureName(r, 'received'); box.appendChild(b); return;
     }
-    // 2) At workshop → with technician
+    // 2) At workshop → with technician (capture which technician)
     if(!r.with_tech_at){
       const b = jBtn('With Technician');
-      b.onclick = () => applyStage(r, { stage:'with_tech', with_tech_at:now(), with_tech_by:currentUserName() });
-      box.appendChild(b); return;
+      b.onclick = () => captureName(r, 'with_tech'); box.appendChild(b); return;
     }
     // 3) In workshop → optional quote/paid + repair done
     if(!r.repair_done_at){
@@ -2267,20 +2281,20 @@
       const d = jBtn('Repair Done'); d.onclick = () => applyStage(r, { stage:'repair_done', repair_done_at:now() }); box.appendChild(d);
       return;
     }
-    // 4) Repair done → send back (if from another branch) or collect / courier here
-    if(needsTransit(r) && !r.return_received_at){
-      if(!r.transit_back_at){
-        const s1 = jBtn('Send Back to ' + (r.logged_by_branch || 'branch'));
-        s1.onclick = () => applyStage(r, { stage:'in_transit_back', transit_back_at:now() });
-        box.appendChild(s1);
-        const s2 = jBtn('Collect / Courier from Cape Town', 'background:#444;color:#fff;');
-        s2.onclick = () => { closeJourney(); openCollectModal(r.id); };
-        box.appendChild(s2);
-      } else {
-        const rb = jBtn('Mark Received at ' + (r.logged_by_branch || 'branch'));
-        rb.onclick = () => captureName(r, 'return_received');
-        box.appendChild(rb);
-      }
+    // 4) Repair done → send to a branch for collection, or collect/courier here
+    if(!r.transit_back_at && !r.return_received_at){
+      const s1 = jBtn('Send to a Branch for Collection');
+      s1.onclick = () => sendBackFlow(r);
+      box.appendChild(s1);
+      const s2 = jBtn('Collect / Courier from ' + (r.branch || 'here'), 'background:#444;color:#fff;');
+      s2.onclick = () => { closeJourney(); openCollectModal(r.id); };
+      box.appendChild(s2);
+      return;
+    }
+    if(r.transit_back_at && !r.return_received_at){
+      const rb = jBtn('Mark Received at ' + (r.return_branch || 'branch'));
+      rb.onclick = () => captureName(r, 'return_received');
+      box.appendChild(rb);
       return;
     }
     // 5) Ready for collection
@@ -2289,12 +2303,31 @@
     box.appendChild(c);
   }
 
+  function sendBackFlow(r){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:0.85rem;font-weight:600;';
+    label.textContent = 'Send to which branch for the client to collect?';
+    box.appendChild(label);
+    const sel = document.createElement('select');
+    sel.style.cssText = 'padding:10px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;';
+    ['Cape Town','Bellville','Somerset'].forEach(bn => { const o = document.createElement('option'); o.value = bn; o.textContent = bn; sel.appendChild(o); });
+    sel.value = r.logged_by_branch || 'Bellville';
+    box.appendChild(sel);
+    const b = jBtn('Send');
+    b.onclick = () => applyStage(r, { stage:'in_transit_back', transit_back_at:new Date().toISOString(), return_branch: sel.value });
+    box.appendChild(b);
+  }
+
   function captureName(r, kind){
     const box = document.getElementById('journeyActions');
     box.innerHTML = '';
     const label = document.createElement('div');
     label.style.cssText = 'font-size:0.85rem;font-weight:600;';
-    label.textContent = kind === 'received' ? 'Received in Cape Town by:' : 'Received at ' + (r.logged_by_branch || 'branch') + ' by:';
+    label.textContent = kind === 'received' ? 'Received in Cape Town by:'
+      : kind === 'with_tech' ? 'Technician name:'
+      : 'Received at ' + (r.return_branch || r.logged_by_branch || 'branch') + ' by:';
     box.appendChild(label);
     const inp = document.createElement('input');
     inp.type = 'text'; inp.value = currentUserName();
@@ -2304,32 +2337,56 @@
     b.onclick = () => {
       const name = (inp.value || '').trim() || currentUserName();
       const now = new Date().toISOString();
-      const patch = kind === 'received'
-        ? { stage:'received', received:true, received_at:now, received_by:name }
-        : { stage:'return_received', return_received_at:now, return_received_by:name };
-      b.disabled = true; b.textContent = 'Saving…';
+      let patch;
+      if(kind === 'received') patch = { stage:'received', received:true, received_at:now, received_by:name };
+      else if(kind === 'with_tech') patch = { stage:'with_tech', with_tech_at:now, with_tech_by:name };
+      else patch = { stage:'return_received', return_received_at:now, return_received_by:name };
       applyStage(r, patch);
     };
     box.appendChild(b);
+    inp.focus();
   }
 
   function quoteFlow(r){
     const box = document.getElementById('journeyActions');
     box.innerHTML = '';
     const label = document.createElement('div');
-    label.style.cssText = 'font-size:0.85rem;font-weight:600;';
-    label.textContent = 'Attach a copy of the quote (optional), then mark quoted:';
+    label.style.cssText = 'font-size:0.85rem;font-weight:600;margin-bottom:2px;';
+    label.textContent = 'Attach a copy of the quote (optional):';
     box.appendChild(label);
-    const file = document.createElement('input');
-    file.type = 'file'; file.accept = 'image/*,.pdf';
-    box.appendChild(file);
+
+    // Hidden file input (opens the browser/search when the zone is clicked)
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file'; fileInput.accept = 'image/*,.pdf';
+    fileInput.style.display = 'none';
+    box.appendChild(fileInput);
+
+    // Drag-and-drop zone (also clickable to browse)
+    const zone = document.createElement('div');
+    zone.style.cssText = 'border:2px dashed var(--gray-border,#bbb);border-radius:8px;padding:20px;text-align:center;font-size:0.85rem;color:var(--gray-text,#666);cursor:pointer;transition:all .15s;background:#fafafa;';
+    zone.innerHTML = '📎 Drag &amp; drop a quote here<br><span style="font-size:0.78rem;">or click to browse / search files</span>';
+    box.appendChild(zone);
+
+    let chosenFile = null;
+    const showChosen = (f) => { chosenFile = f; zone.style.borderColor = '#1d8a3f'; zone.style.background = '#eef7ee'; zone.innerHTML = '✅ ' + escapeHtml(f.name) + '<br><span style="font-size:0.78rem;">click to choose a different file</span>'; };
+
+    zone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => { if(fileInput.files && fileInput.files[0]) showChosen(fileInput.files[0]); });
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.style.borderColor = '#1d8a3f'; zone.style.background = '#eef7ee'; });
+    zone.addEventListener('dragleave', (e) => { e.preventDefault(); if(!chosenFile){ zone.style.borderColor = 'var(--gray-border,#bbb)'; zone.style.background = '#fafafa'; } });
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) showChosen(e.dataTransfer.files[0]);
+    });
+
     const b = jBtn('Mark Quoted');
+    b.style.marginTop = '4px';
     b.onclick = async () => {
       b.disabled = true; b.textContent = 'Saving…';
       const patch = { quoted_at: new Date().toISOString() };
-      if(file.files && file.files[0]){
+      if(chosenFile){
         try {
-          const f = file.files[0];
+          const f = chosenFile;
           const path = r.id + '-quote-' + Date.now() + (f.type.indexOf('pdf') >= 0 ? '.pdf' : '.jpg');
           const { error: upErr } = await sb.storage.from('waybills').upload(path, f);
           if(!upErr) patch.quote_url = path;
@@ -2349,11 +2406,13 @@
   }
 
   async function applyStage(r, patch){
-    const { error } = await sb.from('repairs').update(patch).eq('id', r.id);
-    if(error){ showToast('Error: ' + error.message); renderJourney(); return; }
+    // Optimistic: update the UI immediately so a single click responds instantly,
+    // then persist. (DB latency was making the first click feel unresponsive.)
     Object.assign(r, patch);
     renderJourney();
     renderTable();
+    const { error } = await sb.from('repairs').update(patch).eq('id', r.id);
+    if(error){ showToast('Error saving: ' + error.message); }
   }
 
 
@@ -2390,16 +2449,16 @@
 
     const allRows = repairs.filter(matchesSearch);
 
-    // PENDING / ACTIVE section
+    // PENDING / ACTIVE section — split by stage, not just received flag
     let activeRows = allRows.filter(r => !r.collected);
     if(activeSection === 'pending'){
-      activeRows = activeRows.filter(r => !r.received);
+      activeRows = activeRows.filter(r => tabOf(r) === 'pending');
     } else if(activeSection === 'active'){
-      activeRows = activeRows.filter(r => r.received);
+      activeRows = activeRows.filter(r => tabOf(r) === 'active');
     }
-    // apply branch filter on top
+    // Branch filter uses where the repair currently is / is heading
     if(activeFilter !== 'All'){
-      activeRows = activeRows.filter(r => r.branch === activeFilter);
+      activeRows = activeRows.filter(r => relevantBranch(r) === activeFilter);
     }
 
     const body = document.getElementById('repairsBody');
@@ -2434,7 +2493,7 @@
         actionHtml += `<button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button>`;
 
         tr.innerHTML = `
-          <td data-label="To Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="To Branch">${escapeHtml(relevantBranch(r)||'—')}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
           <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}</td>
