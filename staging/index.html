@@ -2357,6 +2357,7 @@
   }
 
 
+  let renderInProgress = false;
   let renderPending = false;
   const signedUrlCache = new Map(); // path -> { url, expiresAt } — avoids re-signing/re-downloading photos on every render
 
