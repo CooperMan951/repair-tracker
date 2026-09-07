@@ -424,6 +424,7 @@
     <span id="connStatus"></span>
     <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
     <button class="admin-btn" id="statsBtn" style="display:none;">Stats</button>
+    <button class="admin-btn" id="exportBtn" style="display:none;">⬇ Export</button>
     <button class="admin-btn" id="unmatchedBtn" style="display:none;">Unmatched</button>
     <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
     <button class="admin-btn" id="changePwBtn" style="display:none;">Password</button>
@@ -469,6 +470,14 @@
     <label for="notes" style="margin-top:10px;">Notes (optional)</label>
     <textarea id="notes" rows="2" autocomplete="off" placeholder="e.g. URGENT — client needs it back by Fri 12th" style="width:100%;padding:9px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;font-family:inherit;resize:vertical;"></textarea>
 
+    <div id="urgentCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="urgentCheck" style="width:auto;">
+      <label for="urgentCheck" style="margin:0;">🔴 Mark as urgent</label>
+    </div>
+
+    <label for="intakePhoto" style="margin-top:12px;">Condition photo on intake (optional)</label>
+    <input type="file" id="intakePhoto" accept="image/*" capture="environment">
+
     <div id="buyinCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="buyinCheck" style="width:auto;">
       <label for="buyinCheck" style="margin:0;">Buy-in / used gear (in-house repair)</label>
@@ -483,7 +492,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v7</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v8</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -510,6 +519,7 @@
         <div class="filter-btn" data-filter="Cape Town">Cape Town</div>
         <div class="filter-btn" data-filter="Bellville">Bellville</div>
         <div class="filter-btn" data-filter="Somerset">Somerset</div>
+        <div class="filter-btn" id="stuckToggle" style="margin-left:auto;border-color:#f5b5b5;color:#c0392b;">⚠ Stuck only</div>
       </div>
 
       <table id="repairsTable">
@@ -784,6 +794,7 @@
   let repairs = [];
   let searchQuery = "";
   let activeSection = "pending";
+  let stuckOnly = false;
   let collectedFilter = "All";
   let collectedPage = 1;
   const COLLECTED_PER_PAGE = 10;
@@ -838,6 +849,7 @@
     document.getElementById('adminBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
     document.getElementById('changePwBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
     document.getElementById('statsBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('exportBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
     document.getElementById('unmatchedBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
 
     if(collectionMode){
@@ -922,6 +934,41 @@
     renderStats();
     document.getElementById('statsModal').classList.add('show');
   });
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    exportRepairsCsv();
+  });
+  function exportRepairsCsv(){
+    const cols = [
+      ['Job #','job_number'], ['Client','name'], ['Contact','contact_number'],
+      ['Item','item'], ['Stage','stage'], ['Urgent', r => r.is_urgent ? 'Yes' : ''],
+      ['To Branch','branch'], ['Logged By Branch','logged_by_branch'], ['Logged By','logged_by_name'],
+      ['Return Branch','return_branch'], ['Notes','notes'],
+      ['Buy-in', r => r.is_buyin ? 'Yes' : ''], ['Stock Code','stock_code'], ['Used Gear Doc','used_gear_doc'],
+      ['Quote Amount','quote_amount'],
+      ['Logged At','created_at'], ['Received At','received_at'], ['With Tech At','with_tech_at'],
+      ['Repair Done At','repair_done_at'], ['Received At Branch','return_received_at'],
+      ['Collected At','collected_at'], ['Collected By','collected_by'], ['Collected Branch','collected_branch']
+    ];
+    const esc = (v) => {
+      if(v == null) return '';
+      const s = String(v).replace(/"/g,'""');
+      return /[",\n]/.test(s) ? '"' + s + '"' : s;
+    };
+    const rows = [cols.map(c => c[0]).join(',')];
+    repairs.forEach(r => {
+      rows.push(cols.map(c => esc(typeof c[1] === 'function' ? c[1](r) : r[c[1]])).join(','));
+    });
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'orms-repairs-' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Exported ' + repairs.length + ' repairs to CSV');
+  }
+
   document.getElementById('closeStats').addEventListener('click', () => {
     document.getElementById('statsModal').classList.remove('show');
   });
@@ -1139,6 +1186,16 @@
       .map(r => (new Date(r.collected_at) - new Date(r.received_at)) / 86400000);
     const avgCollect = colTimes.length ? (colTimes.reduce((a,b)=>a+b,0)/colTimes.length) : null;
 
+    // Turnaround analytics: time with technician, full logged->collected, urgent/stuck
+    const techTimes = all.filter(r => r.with_tech_at && r.repair_done_at)
+      .map(r => (new Date(r.repair_done_at) - new Date(r.with_tech_at)) / 86400000);
+    const avgTech = techTimes.length ? (techTimes.reduce((a,b)=>a+b,0)/techTimes.length) : null;
+    const fullTimes = all.filter(r => r.created_at && r.collected_at)
+      .map(r => (new Date(r.collected_at) - new Date(r.created_at)) / 86400000);
+    const avgFull = fullTimes.length ? (fullTimes.reduce((a,b)=>a+b,0)/fullTimes.length) : null;
+    const urgentOpen = all.filter(r => r.is_urgent && !r.collected).length;
+    const stuckCount = all.filter(r => isStuck(r)).length;
+
     // Overdue (received, not collected, >3 months)
     const SIX = 1000*60*60*24*30*3;
     const overdue = all.filter(r => r.received && !r.collected && r.received_at && (now - new Date(r.received_at).getTime()) > SIX).length;
@@ -1170,6 +1227,14 @@
       ${statCard(last30.length, 'Logged (last 30 days)', '#111')}
       ${statCard(avgReceive !== null ? avgReceive.toFixed(1) + ' hrs' : '—', 'Avg. time to receive', '#111')}
       ${statCard(avgCollect !== null ? avgCollect.toFixed(1) + ' days' : '—', 'Avg. time to collect', '#111')}
+    </div>`;
+
+    // Turnaround analytics
+    h += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;">
+      ${statCard(avgTech !== null ? avgTech.toFixed(1) + ' days' : '—', 'Avg. with technician', '#1d4f8a')}
+      ${statCard(avgFull !== null ? avgFull.toFixed(1) + ' days' : '—', 'Avg. logged → collected', '#1d4f8a')}
+      ${statCard(urgentOpen, 'Urgent (open)', '#c0392b')}
+      ${statCard(stuckCount, 'Stuck repairs', '#c0392b')}
     </div>`;
 
     // Per-branch table
@@ -1311,7 +1376,13 @@
   document.getElementById('filters').addEventListener('click', async (e) => {
     const btn = e.target.closest('.filter-btn');
     if(!btn) return;
-    document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.remove('active'));
+    if(btn.id === 'stuckToggle'){
+      stuckOnly = !stuckOnly;
+      btn.classList.toggle('active', stuckOnly);
+      await renderTable();
+      return;
+    }
+    document.querySelectorAll('#filters .filter-btn:not(#stuckToggle)').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeFilter = btn.dataset.filter;
     await renderTable();
@@ -1343,6 +1414,8 @@
     const isBuyin = document.getElementById('buyinCheck').checked;
     const stockCode = document.getElementById('stockCode').value.trim();
     const usedGearDoc = document.getElementById('usedGearDoc').value.trim();
+    const isUrgent = document.getElementById('urgentCheck').checked;
+    const intakeFile = document.getElementById('intakePhoto').files[0] || null;
 
     if(!selectedBranch){
       showToast('Please select a branch');
@@ -1361,6 +1434,19 @@
     const willTransit = selectedBranch !== loggerBranch;
     const nowIso = new Date().toISOString();
 
+    // Optional intake condition photo (compressed for light PC viewing)
+    let intakePhotoUrl = null;
+    if(intakeFile){
+      try {
+        submitBtn.textContent = 'Uploading photo…';
+        const cf = await compressImage(intakeFile);
+        const path = jobNumber + '-intake-' + Date.now() + '.jpg';
+        const { error: upErr } = await sb.storage.from('collection-photos').upload(path, cf);
+        if(!upErr) intakePhotoUrl = path;
+      } catch(e){}
+      submitBtn.textContent = 'Logging…';
+    }
+
     const { data, error } = await sb.from('repairs').insert({
       branch: selectedBranch,
       name: name,
@@ -1368,6 +1454,8 @@
       job_number: jobNumber,
       item: item,
       notes: notes || null,
+      is_urgent: isUrgent,
+      intake_photo_url: intakePhotoUrl,
       is_buyin: isBuyin,
       stock_code: isBuyin ? stockCode : null,
       used_gear_doc: isBuyin ? usedGearDoc : null,
@@ -1391,6 +1479,8 @@
     document.getElementById('jobNumber').value = '';
     document.getElementById('item').value = '';
     document.getElementById('notes').value = '';
+    document.getElementById('urgentCheck').checked = false;
+    document.getElementById('intakePhoto').value = '';
     document.getElementById('buyinCheck').checked = false;
     document.getElementById('buyinFields').style.display = 'none';
     document.getElementById('contactRow').style.display = 'block';
@@ -1409,6 +1499,7 @@
     const pendBtn = document.querySelector('#sectionToggle .filter-btn[data-section="pending"]');
     if(pendBtn) pendBtn.classList.add('active');
     document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'All'));
+    stuckOnly = false;
     document.getElementById('activeSection').style.display = 'block';
     document.getElementById('collectedSection').style.display = 'none';
     try { await renderTable(); } catch(e){ console.error('render after log failed:', e); }
@@ -2164,6 +2255,19 @@
     return (Date.now() - new Date(r.received_at).getTime()) > SIX_MONTHS_MS;
   }
 
+  // Flag repairs sitting too long at a stage so nothing slips through the cracks.
+  function isStuck(r){
+    if(r.collected) return null;
+    const days = (ts) => ts ? (Date.now() - new Date(ts).getTime()) / 86400000 : 0;
+    const s = r.stage || '';
+    if(s === 'with_tech' && !r.repair_done_at && days(r.with_tech_at) > 14) return 'With tech ' + Math.floor(days(r.with_tech_at)) + 'd';
+    if(s === 'in_transit' && days(r.transit_at) > 7) return 'In transit ' + Math.floor(days(r.transit_at)) + 'd';
+    if(s === 'in_transit_back' && days(r.transit_back_at) > 7) return 'In transit ' + Math.floor(days(r.transit_back_at)) + 'd';
+    if(s === 'return_received' && days(r.return_received_at) > 30) return 'Uncollected ' + Math.floor(days(r.return_received_at)) + 'd';
+    if(s === 'repair_done' && days(r.repair_done_at) > 30) return 'Uncollected ' + Math.floor(days(r.repair_done_at)) + 'd';
+    return null;
+  }
+
   // ===== Stage Journey =====
   const STAGE_LABELS = {
     logged:'Logged', in_transit:'In Transit to Cape Town', received:'Received in Cape Town',
@@ -2225,15 +2329,22 @@
     const r = repairs.find(x => x.id === journeyRepairId);
     if(!r) return;
     document.getElementById('journeySub').innerHTML =
+      (r.is_urgent ? '<span style="display:inline-block;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#c0392b;color:#fff;margin-bottom:4px;">🔴 URGENT</span><br>' : '') +
       '<b>' + escapeHtml(r.job_number) + '</b> &middot; ' + escapeHtml(r.name) + ' &middot; ' + escapeHtml(r.item) +
       (r.is_buyin ? ' <span style="color:#2c6e2c;">(Buy-in)</span>' : '') +
+      (r.intake_photo_url ? ' &middot; <a href="#" id="journeyIntakePhoto" style="color:var(--accent,#1d4f8a);text-decoration:underline;">📷 intake photo</a>' : '') +
       '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#fff8f2;border:1px solid #fcd9c0;">' +
         '<div style="font-size:0.72rem;font-weight:700;color:#9a3412;letter-spacing:.3px;">NOTES</div>' +
         '<div id="journeyNotesText" style="font-size:0.85rem;color:#7c3a12;white-space:pre-wrap;margin-top:2px;">' + (r.notes ? escapeHtml(r.notes) : '<span style="color:#b8916f;font-style:italic;">No notes yet</span>') + '</div>' +
         '<button id="journeyEditNotes" style="margin-top:6px;font-size:0.75rem;padding:3px 10px;background:#fff;border:1px solid #fcd9c0;color:#9a3412;border-radius:5px;cursor:pointer;">📝 ' + (r.notes ? 'Edit notes' : 'Add notes') + '</button>' +
+        ' <button id="journeyToggleUrgent" style="margin-top:6px;font-size:0.75rem;padding:3px 10px;background:#fff;border:1px solid ' + (r.is_urgent ? '#c0392b' : '#ccc') + ';color:' + (r.is_urgent ? '#c0392b' : '#555') + ';border-radius:5px;cursor:pointer;">' + (r.is_urgent ? '✓ Urgent' : 'Mark urgent') + '</button>' +
       '</div>';
     const editBtn = document.getElementById('journeyEditNotes');
     if(editBtn) editBtn.onclick = () => editNotes(r);
+    const urgBtn = document.getElementById('journeyToggleUrgent');
+    if(urgBtn) urgBtn.onclick = () => applyStage(r, { is_urgent: !r.is_urgent });
+    const intakeLink = document.getElementById('journeyIntakePhoto');
+    if(intakeLink) intakeLink.onclick = (e) => { e.preventDefault(); openStorageFile(r.intake_photo_url, 'collection-photos', null, 'Intake photo — ' + (r.job_number||'')); };
     const fmt = (t) => t ? new Date(t).toLocaleString() : '';
     const step = (done, label, detail) =>
       '<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #f1f1f1;">'
@@ -2248,7 +2359,7 @@
       rows.push(step(!!r.received_at, 'Received in Cape Town', r.received_at ? escapeHtml(r.received_by||'') + ' &middot; ' + fmt(r.received_at) : ''));
     }
     rows.push(step(!!r.with_tech_at, 'With Technician', r.with_tech_at ? (r.with_tech_by ? escapeHtml(r.with_tech_by) + ' &middot; ' : '') + fmt(r.with_tech_at) : ''));
-    rows.push(step(!!r.quoted_at, 'Client Quoted (optional)', r.quoted_at ? fmt(r.quoted_at) + (r.quote_url ? ' &middot; quote attached' : '') : ''));
+    rows.push(step(!!r.quoted_at, 'Client Quoted (optional)', r.quoted_at ? fmt(r.quoted_at) + (r.quote_amount != null ? ' &middot; R' + Number(r.quote_amount).toFixed(2) : '') + (r.quote_url ? ' &middot; quote attached' : '') : ''));
     rows.push(step(!!r.paid_at, 'Client Paid (optional)', fmt(r.paid_at)));
     rows.push(step(!!r.repair_done_at, 'Repair Done', fmt(r.repair_done_at)));
     if(needsTransit(r) && (r.transit_back_at || r.return_received_at)){
@@ -2368,6 +2479,19 @@
     label.textContent = 'Attach a copy of the quote (optional):';
     box.appendChild(label);
 
+    // Optional quote amount (Rand)
+    const amtWrap = document.createElement('div');
+    amtWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
+    const amtLabel = document.createElement('span');
+    amtLabel.textContent = 'Amount (optional): R';
+    amtLabel.style.cssText = 'font-size:0.85rem;';
+    const amtInput = document.createElement('input');
+    amtInput.type = 'number'; amtInput.step = '0.01'; amtInput.min = '0'; amtInput.placeholder = '0.00';
+    amtInput.value = (r.quote_amount != null ? r.quote_amount : '');
+    amtInput.style.cssText = 'padding:8px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;width:120px;';
+    amtWrap.appendChild(amtLabel); amtWrap.appendChild(amtInput);
+    box.appendChild(amtWrap);
+
     // Hidden file input (opens the browser/search when the zone is clicked)
     const fileInput = document.createElement('input');
     fileInput.type = 'file'; fileInput.accept = 'image/*,.pdf';
@@ -2397,6 +2521,8 @@
     b.onclick = async () => {
       b.disabled = true; b.textContent = 'Saving…';
       const patch = { quoted_at: new Date().toISOString() };
+      const amt = parseFloat(amtInput.value);
+      if(!isNaN(amt)) patch.quote_amount = amt;
       if(chosenFile){
         try {
           const f = await compressImage(chosenFile, 1600, 0.82); // legible but light for PC viewing; PDFs pass through
@@ -2490,6 +2616,17 @@
     if(activeFilter !== 'All'){
       activeRows = activeRows.filter(r => relevantBranch(r) === activeFilter);
     }
+    // Optional "stuck only" filter
+    if(stuckOnly){
+      activeRows = activeRows.filter(r => isStuck(r));
+    }
+    // Sort: urgent first, then stuck, then newest logged
+    activeRows.sort((a,b) => {
+      if(!!b.is_urgent !== !!a.is_urgent) return (b.is_urgent?1:0) - (a.is_urgent?1:0);
+      const as = isStuck(a) ? 1 : 0, bs = isStuck(b) ? 1 : 0;
+      if(bs !== as) return bs - as;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
 
     const body = document.getElementById('repairsBody');
     const empty = document.getElementById('emptyState');
@@ -2515,7 +2652,10 @@
 
         if(r.is_loan_return) tr.classList.add('loan-row');
         const overdue = isOverdue(r);
+        const stuck = isStuck(r);
         let statusHtml = stageBadge(r);
+        if(r.is_urgent) statusHtml = '<span style="display:inline-block;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#c0392b;color:#fff;margin-bottom:3px;">🔴 URGENT</span><br>' + statusHtml;
+        if(stuck) statusHtml += '<br><span class="badge overdue" style="background:#fde8e8;color:#c0392b;border:1px solid #f5b5b5;">⚠ ' + escapeHtml(stuck) + '</span>';
         if(overdue) statusHtml += '<br><span class="badge overdue">Not collected 3+ months</span>';
         if(r.is_redo) statusHtml += `<br><span class="badge redo">Redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>`;
 
