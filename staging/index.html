@@ -483,7 +483,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v4</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v5</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -2539,21 +2539,18 @@
       });
     }
 
-    document.querySelectorAll('.journey-btn').forEach(btn => {
-      btn.addEventListener('click', () => openJourney(btn.dataset.id));
-    });
-    document.querySelectorAll('.receive-btn').forEach(btn => {
-      btn.addEventListener('click', () => openReceiveModal(btn.dataset.id));
-    });
-    document.querySelectorAll('.collect-btn').forEach(btn => {
-      btn.addEventListener('click', () => openCollectModal(btn.dataset.id));
-    });
-    document.querySelectorAll('.redo-btn').forEach(btn => {
-      btn.addEventListener('click', () => openRedoModal(btn.dataset.id));
-    });
-    document.querySelectorAll('#repairsBody .delete-btn').forEach(btn => {
-      btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
-    });
+    // Event delegation (attached once): survives table re-renders, so a
+    // background refresh can never swallow a click on Update/Delete/etc.
+    if(!window._repairsBodyDelegated){
+      window._repairsBodyDelegated = true;
+      document.getElementById('repairsBody').addEventListener('click', (e) => {
+        const jb = e.target.closest('.journey-btn');  if(jb){ openJourney(jb.dataset.id); return; }
+        const rb = e.target.closest('.receive-btn');  if(rb){ openReceiveModal(rb.dataset.id); return; }
+        const cb = e.target.closest('.collect-btn');  if(cb){ openCollectModal(cb.dataset.id); return; }
+        const rd = e.target.closest('.redo-btn');     if(rd){ openRedoModal(rd.dataset.id); return; }
+        const del = e.target.closest('.delete-btn');  if(del){ openDeleteModal(del.dataset.id); return; }
+      });
+    }
 
     // COLLECTED section
     let collectedRows = allRows.filter(r => r.collected);
