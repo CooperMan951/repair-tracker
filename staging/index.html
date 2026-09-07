@@ -492,7 +492,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v8</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v9</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -2319,7 +2319,9 @@
     journeyRepairId = id;
     const modal = document.getElementById('journeyModal');
     document.getElementById('closeJourney').onclick = closeJourney;
-    modal.onclick = (e) => { if(e.target === modal) closeJourney(); };
+    // Deliberately no click-outside-to-close here: highlighting text in a field
+    // and releasing the mouse outside the modal would otherwise close it.
+    modal.onclick = null;
     renderJourney();
     modal.classList.add('show');
   }
