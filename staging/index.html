@@ -466,6 +466,9 @@
     <label for="item">Item</label>
     <input type="text" id="item" autocomplete="off" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
 
+    <label for="notes" style="margin-top:10px;">Notes (optional)</label>
+    <textarea id="notes" rows="2" autocomplete="off" placeholder="e.g. URGENT — client needs it back by Fri 12th" style="width:100%;padding:9px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;font-family:inherit;resize:vertical;"></textarea>
+
     <div id="buyinCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="buyinCheck" style="width:auto;">
       <label for="buyinCheck" style="margin:0;">Buy-in / used gear (in-house repair)</label>
@@ -480,7 +483,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v3</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v4</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -1336,6 +1339,7 @@
     const contact = document.getElementById('contact').value.trim();
     const jobNumber = document.getElementById('jobNumber').value.trim();
     const item = document.getElementById('item').value.trim();
+    const notes = document.getElementById('notes').value.trim();
     const isBuyin = document.getElementById('buyinCheck').checked;
     const stockCode = document.getElementById('stockCode').value.trim();
     const usedGearDoc = document.getElementById('usedGearDoc').value.trim();
@@ -1363,6 +1367,7 @@
       contact_number: contact,
       job_number: jobNumber,
       item: item,
+      notes: notes || null,
       is_buyin: isBuyin,
       stock_code: isBuyin ? stockCode : null,
       used_gear_doc: isBuyin ? usedGearDoc : null,
@@ -1385,6 +1390,7 @@
     document.getElementById('contact').value = '';
     document.getElementById('jobNumber').value = '';
     document.getElementById('item').value = '';
+    document.getElementById('notes').value = '';
     document.getElementById('buyinCheck').checked = false;
     document.getElementById('buyinFields').style.display = 'none';
     document.getElementById('contactRow').style.display = 'block';
@@ -2149,7 +2155,7 @@
 
   function matchesSearch(r){
     if(!searchQuery) return true;
-    const haystack = [r.name, r.contact_number, r.job_number, r.item, r.stock_code, r.used_gear_doc].join(' ').toLowerCase();
+    const haystack = [r.name, r.contact_number, r.job_number, r.item, r.stock_code, r.used_gear_doc, r.notes].join(' ').toLowerCase();
     return haystack.includes(searchQuery);
   }
 
@@ -2220,7 +2226,14 @@
     if(!r) return;
     document.getElementById('journeySub').innerHTML =
       '<b>' + escapeHtml(r.job_number) + '</b> &middot; ' + escapeHtml(r.name) + ' &middot; ' + escapeHtml(r.item) +
-      (r.is_buyin ? ' <span style="color:#2c6e2c;">(Buy-in)</span>' : '');
+      (r.is_buyin ? ' <span style="color:#2c6e2c;">(Buy-in)</span>' : '') +
+      '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#fff8f2;border:1px solid #fcd9c0;">' +
+        '<div style="font-size:0.72rem;font-weight:700;color:#9a3412;letter-spacing:.3px;">NOTES</div>' +
+        '<div id="journeyNotesText" style="font-size:0.85rem;color:#7c3a12;white-space:pre-wrap;margin-top:2px;">' + (r.notes ? escapeHtml(r.notes) : '<span style="color:#b8916f;font-style:italic;">No notes yet</span>') + '</div>' +
+        '<button id="journeyEditNotes" style="margin-top:6px;font-size:0.75rem;padding:3px 10px;background:#fff;border:1px solid #fcd9c0;color:#9a3412;border-radius:5px;cursor:pointer;">📝 ' + (r.notes ? 'Edit notes' : 'Add notes') + '</button>' +
+      '</div>';
+    const editBtn = document.getElementById('journeyEditNotes');
+    if(editBtn) editBtn.onclick = () => editNotes(r);
     const fmt = (t) => t ? new Date(t).toLocaleString() : '';
     const step = (done, label, detail) =>
       '<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #f1f1f1;">'
@@ -2415,6 +2428,26 @@
     if(error){ showToast('Error saving: ' + error.message); }
   }
 
+  function editNotes(r){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:0.85rem;font-weight:600;';
+    label.textContent = 'Notes (e.g. urgency, needed-by date):';
+    box.appendChild(label);
+    const ta = document.createElement('textarea');
+    ta.rows = 3; ta.value = r.notes || '';
+    ta.style.cssText = 'padding:10px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;font-family:inherit;resize:vertical;';
+    box.appendChild(ta);
+    const save = jBtn('Save notes');
+    save.onclick = () => applyStage(r, { notes: ta.value.trim() || null });
+    box.appendChild(save);
+    const cancel = jBtn('Cancel', 'background:#eee;color:#333;');
+    cancel.onclick = () => renderJourney();
+    box.appendChild(cancel);
+    ta.focus();
+  }
+
 
   let renderInProgress = false;
   let renderPending = false;
@@ -2496,7 +2529,7 @@
           <td data-label="To Branch">${escapeHtml(relevantBranch(r)||'—')}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
-          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}</td>
+          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}${r.notes ? `<br><span style="display:inline-block;margin-top:3px;font-size:0.75rem;color:#9a3412;background:#fff4ed;border:1px solid #fcd9c0;border-radius:4px;padding:2px 6px;">📝 ${escapeHtml(r.notes)}</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
           <td data-label="Stage">${statusHtml}</td>
