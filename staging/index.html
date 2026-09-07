@@ -483,7 +483,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v6</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v7</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -2399,7 +2399,7 @@
       const patch = { quoted_at: new Date().toISOString() };
       if(chosenFile){
         try {
-          const f = chosenFile;
+          const f = await compressImage(chosenFile, 1600, 0.82); // legible but light for PC viewing; PDFs pass through
           const path = r.id + '-quote-' + Date.now() + (f.type.indexOf('pdf') >= 0 ? '.pdf' : '.jpg');
           const { error: upErr } = await sb.storage.from('waybills').upload(path, f);
           if(!upErr) patch.quote_url = path;
@@ -2410,12 +2410,9 @@
     box.appendChild(b);
   }
 
-  async function viewQuote(r){
+  function viewQuote(r){
     if(!r.quote_url) return;
-    try {
-      const { data: signed } = await sb.storage.from('waybills').createSignedUrl(r.quote_url, 3600);
-      if(signed) window.open(signed.signedUrl, '_blank');
-    } catch(e){}
+    openStorageFile(r.quote_url, 'waybills', null, 'Quote — ' + (r.job_number || ''));
   }
 
   async function applyStage(r, patch){
@@ -2623,8 +2620,8 @@
   } // end _doRender
 
   async function openStorageFile(path, bucket, linkEl, title){
-    const originalText = linkEl.textContent;
-    linkEl.textContent = 'Loading…';
+    const originalText = linkEl ? linkEl.textContent : '';
+    if(linkEl) linkEl.textContent = 'Loading…';
 
     // Show the modal immediately with a loading state
     document.getElementById('viewerTitle').textContent = title || 'Preview';
@@ -2649,16 +2646,18 @@
       }
     }
 
-    linkEl.textContent = originalText;
+    if(linkEl) linkEl.textContent = originalText;
 
     if(signedUrl){
       signedUrlCache.set(cacheKey, { url: signedUrl, expiresAt: Date.now() + 55*60*1000 });
       const isPdf = /\.pdf(\?|$)/i.test(path);
+      const dlUrl = signedUrl + (signedUrl.includes('?') ? '&' : '?') + 'download';
+      const dlLink = `<a href="${escapeHtml(dlUrl)}" style="display:inline-block;margin-top:12px;font-size:0.82rem;color:var(--accent, #1d4f8a);text-decoration:underline;">⬇ Download file</a>`;
       const body = document.getElementById('viewerBody');
       if(isPdf){
-        body.innerHTML = `<div style="text-align:center;"><p style="font-size:0.85rem;color:var(--gray-text);margin-bottom:10px;">PDF document</p><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener" style="color:var(--accent, #1d4f8a);text-decoration:underline;">Open PDF in new tab</a></div>`;
+        body.innerHTML = `<div style="text-align:center;"><p style="font-size:0.85rem;color:var(--gray-text);margin-bottom:10px;">PDF document</p><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener" style="color:var(--accent, #1d4f8a);text-decoration:underline;">Open PDF in new tab</a><br>${dlLink}</div>`;
       } else {
-        body.innerHTML = `<img src="${escapeHtml(signedUrl)}" alt="Preview" style="max-width:100%;max-height:60vh;border-radius:6px;border:1px solid var(--gray-border);">`;
+        body.innerHTML = `<div style="text-align:center;"><img src="${escapeHtml(signedUrl)}" alt="Preview" style="max-width:100%;max-height:58vh;border-radius:6px;border:1px solid var(--gray-border);"><br>${dlLink}</div>`;
       }
     } else {
       document.getElementById('viewerModal').classList.remove('show');
