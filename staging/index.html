@@ -483,7 +483,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v5</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v6</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -2299,7 +2299,7 @@
       const s1 = jBtn('Send to a Branch for Collection');
       s1.onclick = () => sendBackFlow(r);
       box.appendChild(s1);
-      const s2 = jBtn('Collect / Courier from ' + (r.branch || 'here'), 'background:#444;color:#fff;');
+      const s2 = jBtn('Collect / Courier from ' + (r.branch || 'here'), 'background:#1565c0;color:#fff;');
       s2.onclick = () => { closeJourney(); openCollectModal(r.id); };
       box.appendChild(s2);
       return;
@@ -2310,8 +2310,8 @@
       box.appendChild(rb);
       return;
     }
-    // 5) Ready for collection
-    const c = jBtn('Collect');
+    // 5) Ready for collection — blue so it's clearly distinct from the green step buttons
+    const c = jBtn('✔ Collect (client is here)', 'background:#1565c0;color:#fff;font-weight:600;');
     c.onclick = () => { closeJourney(); openCollectModal(r.id); };
     box.appendChild(c);
   }
