@@ -492,7 +492,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v9</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v10</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -2308,10 +2308,7 @@
     else if(s === 'in_transit' || s === 'in_transit_back'){ bg = '#fdf0d5'; fg = '#9a6b00'; }
     else if(s === 'with_tech' || s === 'repair_done'){ bg = '#e7eefc'; fg = '#1d4f8a'; }
     else if(s === 'received' || s === 'return_received'){ bg = '#eef4ec'; fg = '#3a6b3a'; }
-    let extra = '';
-    if(r.quoted_at) extra += '<span style="font-size:0.66rem;color:#1d4f8a;margin-left:4px;">quoted</span>';
-    if(r.paid_at) extra += '<span style="font-size:0.66rem;color:#1d7a44;margin-left:4px;">paid</span>';
-    return '<span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:10px;background:'+bg+';color:'+fg+';">'+escapeHtml(label)+'</span>' + extra;
+    return '<span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:10px;background:'+bg+';color:'+fg+';">'+escapeHtml(label)+'</span>';
   }
 
   let journeyRepairId = null;
@@ -2360,9 +2357,6 @@
       rows.push(step(!!(r.transit_at || r.received_at || r.received), 'In Transit to Cape Town', fmt(r.transit_at)));
       rows.push(step(!!r.received_at, 'Received in Cape Town', r.received_at ? escapeHtml(r.received_by||'') + ' &middot; ' + fmt(r.received_at) : ''));
     }
-    rows.push(step(!!r.with_tech_at, 'With Technician', r.with_tech_at ? (r.with_tech_by ? escapeHtml(r.with_tech_by) + ' &middot; ' : '') + fmt(r.with_tech_at) : ''));
-    rows.push(step(!!r.quoted_at, 'Client Quoted (optional)', r.quoted_at ? fmt(r.quoted_at) + (r.quote_amount != null ? ' &middot; R' + Number(r.quote_amount).toFixed(2) : '') + (r.quote_url ? ' &middot; quote attached' : '') : ''));
-    rows.push(step(!!r.paid_at, 'Client Paid (optional)', fmt(r.paid_at)));
     rows.push(step(!!r.repair_done_at, 'Repair Done', fmt(r.repair_done_at)));
     if(needsTransit(r) && (r.transit_back_at || r.return_received_at)){
       rows.push(step(!!r.transit_back_at, 'In Transit back', fmt(r.transit_back_at)));
@@ -2394,20 +2388,12 @@
       const b = jBtn('Mark Received in Cape Town');
       b.onclick = () => captureName(r, 'received'); box.appendChild(b); return;
     }
-    // 2) At workshop → with technician (capture which technician)
-    if(!r.with_tech_at){
-      const b = jBtn('With Technician');
-      b.onclick = () => captureName(r, 'with_tech'); box.appendChild(b); return;
-    }
-    // 3) In workshop → optional quote/paid + repair done
+    // 2) At workshop → Repair Done
     if(!r.repair_done_at){
-      if(!r.quoted_at){ const q = jBtn('Add Client Quote', 'background:#e7eefc;color:#1d4f8a;'); q.onclick = () => quoteFlow(r); box.appendChild(q); }
-      else { const q = jBtn('View Quote', 'background:#eef;color:#334;'); q.onclick = () => viewQuote(r); box.appendChild(q); }
-      if(!r.paid_at){ const p = jBtn('Mark Client Paid', 'background:#e7eefc;color:#1d4f8a;'); p.onclick = () => applyStage(r, { paid_at:now() }); box.appendChild(p); }
       const d = jBtn('Repair Done'); d.onclick = () => applyStage(r, { stage:'repair_done', repair_done_at:now() }); box.appendChild(d);
       return;
     }
-    // 4) Repair done → send to a branch for collection, or collect/courier here
+    // 3) Repair done → send to a branch for collection, or collect/courier here
     if(!r.transit_back_at && !r.return_received_at){
       const s1 = jBtn('Send to a Branch for Collection');
       s1.onclick = () => sendBackFlow(r);
@@ -2417,6 +2403,7 @@
       box.appendChild(s2);
       return;
     }
+    // 4) In transit back → received at branch
     if(r.transit_back_at && !r.return_received_at){
       const rb = jBtn('Mark Received at ' + (r.return_branch || 'branch'));
       rb.onclick = () => captureName(r, 'return_received');
