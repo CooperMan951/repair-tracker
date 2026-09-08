@@ -547,7 +547,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v13</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v14</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -1092,12 +1092,11 @@
       const photoBtn = u.photo_url
         ? '<button class="unmatched-view" data-path="' + esc(u.photo_url) + '" style="font-size:0.8rem;color:#1d4f8a;background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;">📷 View slip</button>'
         : '';
-      // For slips whose number couldn't be read, offer a manual entry box that
-      // looks up the repair and allocates the collection to it.
-      const manualAlloc = !u.read_number
-        ? '<input type="text" class="manual-num-input" placeholder="Enter job #" style="font-size:0.8rem;padding:5px 8px;border:1px solid var(--gray-border,#ccc);border-radius:5px;width:140px;">'
-          + '<button class="manual-alloc-btn" data-slip-id="' + esc(String(u.id||'')) + '" data-photo="' + esc(u.photo_url||'') + '" style="font-size:0.78rem;padding:5px 12px;background:#1d8a3f;color:#fff;border:none;border-radius:5px;cursor:pointer;">Allocate</button>'
-        : '';
+      // Manual entry box on every slip. If a number is already saved it's
+      // pre-filled, so you can re-try allocation once the repair is logged.
+      const manualAlloc =
+        '<input type="text" class="manual-num-input" placeholder="Enter job #" value="' + esc(u.read_number || '') + '" style="font-size:0.8rem;padding:5px 8px;border:1px solid var(--gray-border,#ccc);border-radius:5px;width:140px;">'
+        + '<button class="manual-alloc-btn" data-slip-id="' + esc(String(u.id||'')) + '" data-photo="' + esc(u.photo_url||'') + '" style="font-size:0.78rem;padding:5px 12px;background:#1d8a3f;color:#fff;border:none;border-radius:5px;cursor:pointer;">Allocate</button>';
       h += '<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">'
         + '<div style="font-weight:600;">' + rn + '</div>'
         + '<div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">' + esc(u.branch||'—') + ' &middot; ' + esc(u.scanned_by||'') + ' &middot; ' + esc(when) + '</div>'
@@ -1155,8 +1154,17 @@
           btn.disabled = false; btn.textContent = 'Allocate'; return;
         }
         if(!matches || matches.length === 0){
-          if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'No repair found with number ' + num + '. It may not be logged yet.'; }
-          btn.disabled = false; btn.textContent = 'Allocate'; return;
+          // No repair logged yet — still save the typed number onto the slip so
+          // it's recorded, and can be allocated once the repair is logged.
+          const { error: saveErr } = await sb.from('unmatched_collections')
+            .update({ read_number: num }).eq('id', btn.dataset.slipId);
+          if(saveErr){
+            if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Error saving: ' + saveErr.message; }
+            btn.disabled = false; btn.textContent = 'Allocate'; return;
+          }
+          if(msg){ msg.style.color = '#9a6b00'; msg.textContent = 'No job logged for ' + num + ' yet — number saved to this slip. Allocate again once it\u2019s logged.'; }
+          setTimeout(loadUnmatched, 1400);
+          return;
         }
 
         // Prefer a not-yet-collected match.
