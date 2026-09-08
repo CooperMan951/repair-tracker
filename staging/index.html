@@ -492,7 +492,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v10</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v11</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -538,6 +538,11 @@
         <tbody id="repairsBody"></tbody>
       </table>
       <div class="empty" id="emptyState" style="display:none;">No repairs logged yet.</div>
+      <div id="activePagination" style="display:none;align-items:center;justify-content:center;gap:14px;margin-top:14px;">
+        <button id="activePrev" class="filter-btn" style="cursor:pointer;">← Prev</button>
+        <span id="activePageInfo" style="font-size:0.85rem;color:var(--gray-text);"></span>
+        <button id="activeNext" class="filter-btn" style="cursor:pointer;">Next →</button>
+      </div>
     </div>
 
     <div id="collectedSection" style="display:none;">
@@ -798,6 +803,8 @@
   let collectedFilter = "All";
   let collectedPage = 1;
   const COLLECTED_PER_PAGE = 10;
+  let activePage = 1;
+  const ACTIVE_PER_PAGE = 10;
 
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 3; // 3-month overdue threshold
 
@@ -1349,6 +1356,7 @@
 
   document.getElementById('searchInput').addEventListener('input', async (e) => {
     searchQuery = e.target.value.trim().toLowerCase();
+    activePage = 1;
     await renderTable();
   });
 
@@ -1358,6 +1366,7 @@
     document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeSection = btn.dataset.section;
+    activePage = 1;
     document.getElementById('activeSection').style.display = (activeSection === 'pending' || activeSection === 'active') ? 'block' : 'none';
     document.getElementById('collectedSection').style.display = activeSection === 'collected' ? 'block' : 'none';
     await renderTable();
@@ -1379,12 +1388,14 @@
     if(btn.id === 'stuckToggle'){
       stuckOnly = !stuckOnly;
       btn.classList.toggle('active', stuckOnly);
+      activePage = 1;
       await renderTable();
       return;
     }
     document.querySelectorAll('#filters .filter-btn:not(#stuckToggle)').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeFilter = btn.dataset.filter;
+    activePage = 1;
     await renderTable();
   });
 
@@ -1403,6 +1414,13 @@
   });
   document.getElementById('collectedNext').addEventListener('click', async () => {
     collectedPage++; await renderTable(); // renderTable clamps to max page
+  });
+
+  document.getElementById('activePrev').addEventListener('click', async () => {
+    if(activePage > 1){ activePage--; await renderTable(); }
+  });
+  document.getElementById('activeNext').addEventListener('click', async () => {
+    activePage++; await renderTable(); // renderTable clamps to max page
   });
 
   document.getElementById('submitBtn').addEventListener('click', async () => {
@@ -1500,6 +1518,7 @@
     if(pendBtn) pendBtn.classList.add('active');
     document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'All'));
     stuckOnly = false;
+    activePage = 1;
     document.getElementById('activeSection').style.display = 'block';
     document.getElementById('collectedSection').style.display = 'none';
     try { await renderTable(); } catch(e){ console.error('render after log failed:', e); }
@@ -2619,14 +2638,23 @@
 
     const body = document.getElementById('repairsBody');
     const empty = document.getElementById('emptyState');
+    const aPagination = document.getElementById('activePagination');
     body.innerHTML = '';
 
     if(activeRows.length === 0){
       empty.style.display = 'block';
+      if(aPagination) aPagination.style.display = 'none';
     } else {
       empty.style.display = 'none';
 
-      activeRows.forEach(r => {
+      // Paginate — 10 per page, same as the Collected tab
+      const totalPages = Math.max(1, Math.ceil(activeRows.length / ACTIVE_PER_PAGE));
+      if(activePage > totalPages) activePage = totalPages;
+      if(activePage < 1) activePage = 1;
+      const startIdx = (activePage - 1) * ACTIVE_PER_PAGE;
+      const pageRows = activeRows.slice(startIdx, startIdx + ACTIVE_PER_PAGE);
+
+      pageRows.forEach(r => {
         const tr = document.createElement('tr');
 
         // Collection-station view: only Job # + Client name + a Collect button.
@@ -2663,6 +2691,19 @@
         `;
         body.appendChild(tr);
       });
+
+      // Pagination controls
+      if(activeRows.length > ACTIVE_PER_PAGE){
+        aPagination.style.display = 'flex';
+        document.getElementById('activePageInfo').textContent =
+          `Page ${activePage} of ${totalPages}  ·  ${activeRows.length} repairs`;
+        document.getElementById('activePrev').disabled = (activePage <= 1);
+        document.getElementById('activeNext').disabled = (activePage >= totalPages);
+        document.getElementById('activePrev').style.opacity = (activePage <= 1) ? '0.4' : '1';
+        document.getElementById('activeNext').style.opacity = (activePage >= totalPages) ? '0.4' : '1';
+      } else {
+        aPagination.style.display = 'none';
+      }
     }
 
     // Event delegation (attached once): survives table re-renders, so a
