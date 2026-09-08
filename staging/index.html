@@ -547,7 +547,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v12</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v13</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -1218,6 +1218,20 @@
     document.getElementById('changePwModal').classList.remove('show');
     showToast('Password updated successfully');
   });
+
+  // Flag repairs sitting too long at a stage (outer scope: used by both the
+  // Stats panel and the main render).
+  function isStuck(r){
+    if(r.collected) return null;
+    const days = (ts) => ts ? (Date.now() - new Date(ts).getTime()) / 86400000 : 0;
+    const s = r.stage || '';
+    if(s === 'with_tech' && !r.repair_done_at && days(r.with_tech_at) > 14) return 'With tech ' + Math.floor(days(r.with_tech_at)) + 'd';
+    if(s === 'in_transit' && days(r.transit_at) > 7) return 'In transit ' + Math.floor(days(r.transit_at)) + 'd';
+    if(s === 'in_transit_back' && days(r.transit_back_at) > 7) return 'In transit ' + Math.floor(days(r.transit_back_at)) + 'd';
+    if(s === 'return_received' && days(r.return_received_at) > 30) return 'Uncollected ' + Math.floor(days(r.return_received_at)) + 'd';
+    if(s === 'repair_done' && days(r.repair_done_at) > 30) return 'Uncollected ' + Math.floor(days(r.repair_done_at)) + 'd';
+    return null;
+  }
 
   function renderStats(){
     const all = repairs;
@@ -2327,19 +2341,6 @@
   function isOverdue(r){
     if(!r.received || r.collected || !r.received_at) return false;
     return (Date.now() - new Date(r.received_at).getTime()) > SIX_MONTHS_MS;
-  }
-
-  // Flag repairs sitting too long at a stage so nothing slips through the cracks.
-  function isStuck(r){
-    if(r.collected) return null;
-    const days = (ts) => ts ? (Date.now() - new Date(ts).getTime()) / 86400000 : 0;
-    const s = r.stage || '';
-    if(s === 'with_tech' && !r.repair_done_at && days(r.with_tech_at) > 14) return 'With tech ' + Math.floor(days(r.with_tech_at)) + 'd';
-    if(s === 'in_transit' && days(r.transit_at) > 7) return 'In transit ' + Math.floor(days(r.transit_at)) + 'd';
-    if(s === 'in_transit_back' && days(r.transit_back_at) > 7) return 'In transit ' + Math.floor(days(r.transit_back_at)) + 'd';
-    if(s === 'return_received' && days(r.return_received_at) > 30) return 'Uncollected ' + Math.floor(days(r.return_received_at)) + 'd';
-    if(s === 'repair_done' && days(r.repair_done_at) > 30) return 'Uncollected ' + Math.floor(days(r.repair_done_at)) + 'd';
-    return null;
   }
 
   // ===== Stage Journey =====
