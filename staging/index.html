@@ -482,6 +482,7 @@
     <button class="admin-btn" id="exportBtn" style="display:none;">⬇ Export</button>
     <button class="admin-btn" id="unmatchedBtn" style="display:none;">Unmatched</button>
     <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
+    <button class="admin-btn" id="helpBtn" style="display:none;">? Help</button>
     <button class="admin-btn" id="changePwBtn" style="display:none;">Password</button>
     <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
   </div>
@@ -547,7 +548,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v15</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v16</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -829,6 +830,52 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="helpModal">
+  <div class="modal" style="max-width:560px;max-height:88vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <h3 style="margin:0;">How the Repair Tracker works</h3>
+      <button class="cancel" id="closeHelp" style="padding:5px 12px;">Close</button>
+    </div>
+    <div style="font-size:0.88rem;line-height:1.55;color:var(--black);">
+      <p style="margin-bottom:12px;">This app follows a repair from the moment it's booked in until the client collects it — one record the whole way, so nothing gets lost between branches.</p>
+
+      <div style="font-weight:700;margin:14px 0 4px;">The three tabs</div>
+      <ul style="margin:0 0 8px 18px;padding:0;">
+        <li><b>Pending</b> — booked in and on its way (in transit).</li>
+        <li><b>Active</b> — at Cape Town being worked on, or back at a branch waiting for the client.</li>
+        <li><b>Collected</b> — done and collected.</li>
+      </ul>
+
+      <div style="font-weight:700;margin:14px 0 4px;">Logging a repair</div>
+      <p style="margin:0 0 8px;">Pick the branch it's going to, fill in the client + job details, and tap <b>Log Repair</b>. Tick <b>🔴 Urgent</b> for rush jobs (they jump to the top), add <b>Notes</b> (e.g. "needed by Friday"), and optionally snap a <b>condition photo</b>.</p>
+
+      <div style="font-weight:700;margin:14px 0 4px;">Moving it along — the "Update ▸" button</div>
+      <p style="margin:0 0 6px;">Tap <b>Update ▸</b> on any repair to see its journey and do the next step:</p>
+      <ol style="margin:0 0 8px 18px;padding:0;">
+        <li><b>Received by</b> — when it arrives at Cape Town (enter who received it).</li>
+        <li><b>Repair Done</b> — when the workshop is finished.</li>
+        <li><b>Send to Branch</b> — pick where the client will collect (or Collect/Courier from Cape Town).</li>
+        <li><b>Received by</b> — when it arrives back at the branch.</li>
+        <li><b>Collect</b> — when the client picks it up (name + signature).</li>
+      </ol>
+
+      <div style="font-weight:700;margin:14px 0 4px;">Button colours</div>
+      <ul style="margin:0 0 8px 18px;padding:0;">
+        <li><span style="color:#1d8a3f;font-weight:600;">Green</span> = move to the next step.</li>
+        <li><span style="color:#1565c0;font-weight:600;">Blue</span> = collect / hand to the client.</li>
+        <li><span style="color:#c0392b;font-weight:600;">Red</span> = urgent or delete.</li>
+      </ul>
+
+      <div style="font-weight:700;margin:14px 0 4px;">Handy extras</div>
+      <ul style="margin:0 0 4px 18px;padding:0;">
+        <li><b>Search</b> finds by job number, name, contact, notes or stock code.</li>
+        <li><b>⚠ Stuck only</b> shows repairs sitting too long.</li>
+        <li>Made a mistake? Open <b>Update ▸</b> and use <b>↩ Undo last step</b>.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="journeyModal">
   <div class="modal" style="max-width:520px;max-height:88vh;overflow-y:auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
@@ -904,6 +951,7 @@
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
+    document.getElementById('helpBtn').style.display = 'inline-block';
     document.getElementById('userEmailLabel').textContent = email;
 
     // Admin/management buttons — never for the collection station.
@@ -990,6 +1038,16 @@
     document.getElementById('newUserPassword').value = '';
     document.getElementById('adminPinForUser').value = '';
     document.getElementById('adminModal').classList.add('show');
+  });
+
+  document.getElementById('helpBtn').addEventListener('click', () => {
+    document.getElementById('helpModal').classList.add('show');
+  });
+  document.getElementById('closeHelp').addEventListener('click', () => {
+    document.getElementById('helpModal').classList.remove('show');
+  });
+  document.getElementById('helpModal').addEventListener('click', (e) => {
+    if(e.target === document.getElementById('helpModal')) document.getElementById('helpModal').classList.remove('show');
   });
 
   document.getElementById('statsBtn').addEventListener('click', () => {
@@ -2448,6 +2506,16 @@
     rows.push(step(!!r.collected, 'Client Collects', r.collected_at ? escapeHtml(r.collected_by||'') + ' &middot; ' + fmt(r.collected_at) + (r.collected_branch ? ' &middot; at ' + escapeHtml(r.collected_branch) : '') : ''));
     document.getElementById('journeyTimeline').innerHTML = rows.join('');
     renderJourneyActions(r);
+    // Undo last step (if there's a completed step to revert)
+    const undo = lastStepInfo(r);
+    if(undo){
+      const box = document.getElementById('journeyActions');
+      const u = document.createElement('button');
+      u.textContent = '↩ Undo last step (' + undo.label + ')';
+      u.style.cssText = 'margin-top:10px;padding:8px;border:1px solid var(--gray-border,#ccc);background:#fff;color:var(--gray-text,#666);border-radius:6px;font-size:0.8rem;cursor:pointer;';
+      u.onclick = () => confirmUndo(r, undo);
+      box.appendChild(u);
+    }
   }
 
   function jBtn(label, style){
@@ -2614,6 +2682,31 @@
     renderTable();
     const { error } = await sb.from('repairs').update(patch).eq('id', r.id);
     if(error){ showToast('Error saving: ' + error.message); }
+  }
+
+  // Work out the most recent completed step and how to revert it.
+  function lastStepInfo(r){
+    if(r.collected) return { label:'Collection', patch:{ collected:false, collected_at:null, collected_by:null, collected_branch:null, signature_url:null, collected_photo_url:null, is_courier:false, courier_address:null, waybill_url:null, stage: r.return_received_at ? 'return_received' : 'repair_done' } };
+    if(r.return_received_at) return { label:'Received at ' + (r.return_branch||'branch'), patch:{ return_received_at:null, return_received_by:null, stage:'in_transit_back' } };
+    if(r.transit_back_at) return { label:'Send to branch', patch:{ transit_back_at:null, return_branch:null, stage:'repair_done' } };
+    if(r.repair_done_at) return { label:'Repair done', patch:{ repair_done_at:null, stage: r.received_at ? 'received' : 'logged' } };
+    if(r.received_at) return { label:'Received in Cape Town', patch:{ received_at:null, received_by:null, received:false, stage: needsTransit(r) ? 'in_transit' : 'logged' } };
+    return null;
+  }
+
+  function confirmUndo(r, undo){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    const msg = document.createElement('div');
+    msg.style.cssText = 'font-size:0.85rem;';
+    msg.textContent = 'Undo "' + undo.label + '"? This reverts the last step.';
+    box.appendChild(msg);
+    const yes = jBtn('Yes, undo', 'background:#c0392b;color:#fff;');
+    yes.onclick = () => applyStage(r, undo.patch);
+    box.appendChild(yes);
+    const no = jBtn('Cancel', 'background:#eee;color:#333;');
+    no.onclick = () => renderJourney();
+    box.appendChild(no);
   }
 
   function editNotes(r){
