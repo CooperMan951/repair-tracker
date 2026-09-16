@@ -464,6 +464,7 @@
   .login-screen{ border-radius:16px; box-shadow:var(--shadow); }
   .login-screen button{ border-radius:10px; transition:transform .08s, background .15s; }
   .login-screen button:hover{ background:#2a3444; transform:translateY(-1px); }
+  .summary-tile:hover{ box-shadow:0 4px 14px rgba(20,30,45,.12); transform:translateY(-1px); }
 
   /* ---- Bigger touch targets on phones & tablets (collection iPad, staff phones) ---- */
   @media (pointer: coarse){
@@ -562,7 +563,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v17</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v18</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -576,6 +577,8 @@
     <div class="overdue-banner" id="overdueBanner"></div>
 
     <div class="search-wrap" id="searchWrap"></div>
+
+    <div id="summaryCards" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;"></div>
 
     <div class="section-toggle" id="sectionToggle">
       <div class="filter-btn active" data-section="pending">Pending</div>
@@ -897,6 +900,7 @@
       <button class="cancel" id="closeJourney" style="padding:5px 12px;">Close</button>
     </div>
     <div id="journeySub" style="font-size:0.85rem;color:var(--gray-text);margin-bottom:12px;"></div>
+    <div id="journeyStepper" style="margin-bottom:14px;"></div>
     <div id="journeyTimeline"></div>
     <div id="journeyActions" style="margin-top:16px;display:flex;flex-direction:column;gap:8px;"></div>
   </div>
@@ -1518,6 +1522,26 @@
     activePage = 1;
     document.getElementById('activeSection').style.display = (activeSection === 'pending' || activeSection === 'active') ? 'block' : 'none';
     document.getElementById('collectedSection').style.display = activeSection === 'collected' ? 'block' : 'none';
+    await renderTable();
+  });
+
+  document.getElementById('summaryCards').addEventListener('click', async (e) => {
+    const tile = e.target.closest('.summary-tile');
+    if(!tile) return;
+    const action = tile.dataset.action;
+    if(action === 'pending' || action === 'active' || action === 'urgent'){
+      const target = action === 'urgent' ? 'pending' : action;
+      activeSection = target;
+      document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.section === target));
+      document.getElementById('activeSection').style.display = 'block';
+      document.getElementById('collectedSection').style.display = 'none';
+      activePage = 1;
+    } else if(action === 'stuck'){
+      stuckOnly = !stuckOnly;
+      const st = document.getElementById('stuckToggle');
+      if(st) st.classList.toggle('active', stuckOnly);
+      activePage = 1;
+    }
     await renderTable();
   });
 
@@ -2475,6 +2499,33 @@
     if(s === 'in_transit_back' || s === 'return_received') return r.return_branch || r.logged_by_branch || r.branch;
     return r.branch;
   }
+  // Colour for the left strip on each row / summary tiles
+  function stageStripColor(r){
+    if(r.is_urgent && !r.collected) return '#c0392b';
+    const s = r.stage || '';
+    if(s === 'in_transit' || s === 'in_transit_back') return '#e8850c';
+    if(s === 'return_received') return '#1d8a3f';
+    if(s === 'received' || s === 'repair_done' || s === 'with_tech') return '#1565c0';
+    if(s === 'collected') return '#8592a3';
+    return '#c9d2dc';
+  }
+  // Applicable steps for the horizontal stepper, with done flags
+  function journeySteps(r){
+    const s = [];
+    s.push({ label:'Logged', done:true });
+    if(needsTransit(r)){
+      s.push({ label:'In transit', done: !!(r.transit_at || r.received_at) });
+      s.push({ label:'Received', done: !!r.received_at });
+    }
+    s.push({ label:'Repaired', done: !!r.repair_done_at });
+    if(r.transit_back_at || r.return_received_at){
+      s.push({ label:'Return', done: !!r.transit_back_at });
+      s.push({ label:'At branch', done: !!r.return_received_at });
+    }
+    s.push({ label:'Collected', done: !!r.collected });
+    return s;
+  }
+
   function stageBadge(r){
     const s = r.stage || (r.collected ? 'collected' : (r.received ? 'received' : 'logged'));
     let label = STAGE_LABELS[s] || s;
@@ -2541,6 +2592,30 @@
     }
     rows.push(step(!!r.collected, 'Client Collects', r.collected_at ? escapeHtml(r.collected_by||'') + ' &middot; ' + fmt(r.collected_at) + (r.collected_branch ? ' &middot; at ' + escapeHtml(r.collected_branch) : '') : ''));
     document.getElementById('journeyTimeline').innerHTML = rows.join('');
+
+    // Horizontal progress stepper
+    const steps = journeySteps(r);
+    let lastDone = -1;
+    steps.forEach((st, i) => { if(st.done) lastDone = i; });
+    let sh = '<div style="display:flex;align-items:flex-start;overflow-x:auto;padding:4px 2px 2px;">';
+    steps.forEach((st, i) => {
+      const done = st.done;
+      const isCurrent = (i === lastDone);
+      const dotBg = done ? (isCurrent ? '#1565c0' : '#1d8a3f') : '#fff';
+      const dotBorder = done ? dotBg : '#c9d2dc';
+      const dotInner = done ? (isCurrent ? '' : '✓') : '';
+      if(i > 0){
+        const lineOn = steps[i].done || steps[i-1].done && steps[i].done;
+        const lineColor = steps[i].done ? '#1d8a3f' : '#dde3ea';
+        sh += '<div style="flex:1;height:3px;background:' + lineColor + ';margin-top:11px;min-width:16px;"></div>';
+      }
+      sh += '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:58px;">'
+        + '<div style="width:24px;height:24px;border-radius:50%;background:' + dotBg + ';border:2px solid ' + dotBorder + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.7rem;font-weight:700;">' + dotInner + '</div>'
+        + '<div style="font-size:0.62rem;margin-top:4px;text-align:center;color:' + (done ? '#1e2632' : '#9aa5b3') + ';font-weight:' + (isCurrent ? '700' : '500') + ';line-height:1.15;">' + escapeHtml(st.label) + '</div>'
+        + '</div>';
+    });
+    sh += '</div>';
+    document.getElementById('journeyStepper').innerHTML = sh;
     renderJourneyActions(r);
     // Undo last step (if there's a completed step to revert)
     const undo = lastStepInfo(r);
@@ -2799,6 +2874,30 @@
 
     const allRows = repairs.filter(matchesSearch);
 
+    // Summary cards — a quick pulse of open repairs (respects the branch filter)
+    const summaryEl = document.getElementById('summaryCards');
+    if(summaryEl){
+      if(collectionMode){
+        summaryEl.style.display = 'none';
+      } else {
+        summaryEl.style.display = 'flex';
+        const openRows = repairs.filter(r => !r.collected && (activeFilter === 'All' || relevantBranch(r) === activeFilter));
+        const pendCount = openRows.filter(r => tabOf(r) === 'pending').length;
+        const actCount  = openRows.filter(r => tabOf(r) === 'active').length;
+        const urgCount  = openRows.filter(r => r.is_urgent).length;
+        const stkCount  = openRows.filter(r => isStuck(r)).length;
+        const tile = (num, label, color, action) =>
+          '<div class="summary-tile" data-action="' + action + '" style="flex:1;min-width:88px;background:#fff;border:1px solid var(--gray-border,#e3e7ec);border-left:4px solid ' + color + ';border-radius:11px;padding:11px 13px;cursor:pointer;transition:box-shadow .15s;">'
+          + '<div style="font-size:1.5rem;font-weight:700;color:' + color + ';line-height:1;">' + num + '</div>'
+          + '<div style="font-size:0.68rem;color:var(--gray-text,#5b6673);margin-top:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">' + label + '</div></div>';
+        summaryEl.innerHTML =
+          tile(pendCount, 'Pending', '#e8850c', 'pending') +
+          tile(actCount, 'Active', '#1565c0', 'active') +
+          tile(urgCount, 'Urgent', '#c0392b', 'urgent') +
+          tile(stkCount, 'Stuck', '#9a6b00', 'stuck');
+      }
+    }
+
     // PENDING / ACTIVE section — split by stage, not just received flag
     let activeRows = allRows.filter(r => !r.collected);
     if(activeSection === 'pending'){
@@ -2866,7 +2965,7 @@
         actionHtml += `<button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button>`;
 
         tr.innerHTML = `
-          <td data-label="To Branch">${escapeHtml(relevantBranch(r)||'—')}</td>
+          <td data-label="To Branch" style="border-left:4px solid ${stageStripColor(r)};">${escapeHtml(relevantBranch(r)||'—')}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
           <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}${r.notes ? `<br><span style="display:inline-block;margin-top:3px;font-size:0.75rem;color:#9a3412;background:#fff4ed;border:1px solid #fcd9c0;border-radius:4px;padding:2px 6px;">📝 ${escapeHtml(r.notes)}</span>` : ''}</td>
@@ -2875,6 +2974,7 @@
           <td data-label="Stage">${statusHtml}</td>
           <td data-label="">${actionHtml}</td>
         `;
+        tr.style.borderLeft = '4px solid ' + stageStripColor(r);
         body.appendChild(tr);
       });
 
