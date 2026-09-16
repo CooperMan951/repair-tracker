@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>ORMS Repair Tracker — Staff Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f141b; --surface:#1a212c; --surface2:#232c39;
+    --border:#2b3543; --text:#e6ebf2; --muted:#94a1b2;
+    --accent:#e8850c; --green:#2ecc71; --blue:#4a9eff; --red:#e5544a;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Inter','Segoe UI',system-ui,-apple-system,Arial,sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased; letter-spacing:-.1px;
+  }
+  .wrap{ max-width:820px; margin:0 auto; padding:0 18px 80px; }
+
+  /* Hero */
+  header.hero{
+    background:linear-gradient(160deg,#141a23,#0f141b);
+    border-bottom:3px solid var(--accent);
+    padding:44px 18px 38px; text-align:center;
+  }
+  .hero .badge{ display:inline-block; font-size:.72rem; font-weight:700; letter-spacing:1.5px;
+    text-transform:uppercase; color:var(--accent); background:rgba(232,133,12,.12);
+    border:1px solid rgba(232,133,12,.3); padding:5px 14px; border-radius:30px; margin-bottom:16px; }
+  .hero h1{ font-size:2rem; font-weight:800; letter-spacing:-.8px; }
+  .hero p{ color:var(--muted); max-width:520px; margin:10px auto 0; font-size:1.02rem; }
+
+  /* Contents */
+  .toc{ background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:18px 20px; margin:30px 0; }
+  .toc h3{ font-size:.75rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:12px; }
+  .toc ol{ list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:8px 22px; }
+  .toc a{ color:var(--text); text-decoration:none; font-size:.95rem; display:flex; gap:9px; align-items:center; padding:4px 0; }
+  .toc a:hover{ color:var(--accent); }
+  .toc .n{ color:var(--accent); font-weight:700; font-variant-numeric:tabular-nums; }
+  @media(max-width:560px){ .toc ol{ grid-template-columns:1fr; } .hero h1{ font-size:1.6rem; } }
+
+  /* Sections */
+  section{ background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:26px 26px 28px; margin-bottom:20px; scroll-margin-top:14px; }
+  section > h2{ font-size:1.3rem; font-weight:700; letter-spacing:-.4px; display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+  section > h2 .num{ flex-shrink:0; width:34px; height:34px; border-radius:9px; background:var(--accent);
+    color:#14181f; font-weight:800; font-size:1rem; display:flex; align-items:center; justify-content:center; }
+  section .lead{ color:var(--muted); margin:2px 0 18px; }
+  @media(max-width:560px){ section{ padding:22px 18px; } }
+
+  /* Steps */
+  .steps{ counter-reset:step; display:flex; flex-direction:column; gap:14px; }
+  .step{ position:relative; padding-left:44px; }
+  .step::before{ counter-increment:step; content:counter(step); position:absolute; left:0; top:0;
+    width:28px; height:28px; border-radius:50%; background:var(--surface2); border:1px solid var(--border);
+    color:var(--accent); font-weight:700; font-size:.85rem; display:flex; align-items:center; justify-content:center; }
+  .step b{ color:var(--text); }
+  .step p{ color:var(--muted); font-size:.95rem; margin-top:1px; }
+
+  ul.plain{ list-style:none; display:flex; flex-direction:column; gap:9px; margin-top:6px; }
+  ul.plain li{ padding-left:24px; position:relative; color:var(--muted); }
+  ul.plain li::before{ content:"›"; position:absolute; left:6px; top:-1px; color:var(--accent); font-weight:700; }
+  ul.plain li b{ color:var(--text); }
+
+  /* Pills / buttons demo */
+  .pill{ display:inline-block; font-size:.8rem; font-weight:600; padding:4px 12px; border-radius:8px; color:#fff; }
+  .pill.green{ background:#1d8a3f; } .pill.blue{ background:#1565c0; } .pill.red{ background:#c0392b; }
+  .pill.amber{ background:var(--accent); color:#14181f; }
+  .legend{ display:flex; flex-direction:column; gap:12px; }
+  .legend .row{ display:flex; gap:14px; align-items:flex-start; }
+  .legend .row .txt{ color:var(--muted); font-size:.95rem; }
+  .legend .row .txt b{ color:var(--text); }
+
+  .tag{ display:inline-block; font-size:.72rem; font-weight:700; padding:2px 9px; border-radius:10px; }
+  .tag.urgent{ background:#c0392b; color:#fff; }
+  .tag.stuck{ background:#fde8e8; color:#c0392b; }
+  .tag.note{ background:rgba(232,133,12,.14); color:#f0b060; border:1px solid rgba(232,133,12,.32); }
+
+  .callout{ background:var(--surface2); border-left:4px solid var(--accent); border-radius:9px;
+    padding:14px 16px; margin-top:16px; font-size:.94rem; color:var(--muted); }
+  .callout b{ color:var(--text); }
+
+  .stripdemo{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+  .strip{ border-left:4px solid; padding:8px 12px; background:var(--surface2); border-radius:0 8px 8px 0; font-size:.85rem; }
+
+  footer{ text-align:center; color:var(--muted); font-size:.85rem; padding-top:20px; }
+  footer .open{ display:inline-block; margin-top:6px; background:var(--accent); color:#14181f;
+    font-weight:700; text-decoration:none; padding:12px 26px; border-radius:10px; }
+  .top{ display:inline-block; margin-top:14px; color:var(--accent); text-decoration:none; font-size:.85rem; }
+  a{ color:var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="badge">Staff Guide</div>
+  <h1>🚀 ORMS Repair Tracker</h1>
+  <p>Everything you need to log, track and collect repairs between branches. This takes about 5 minutes to read — keep it handy.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="toc">
+    <h3>What's inside</h3>
+    <ol>
+      <li><a href="#login"><span class="n">1</span> Signing in</a></li>
+      <li><a href="#screen"><span class="n">2</span> The main screen</a></li>
+      <li><a href="#log"><span class="n">3</span> Logging a repair</a></li>
+      <li><a href="#update"><span class="n">4</span> Moving it along</a></li>
+      <li><a href="#buttons"><span class="n">5</span> Button colours</a></li>
+      <li><a href="#collect"><span class="n">6</span> Collecting</a></li>
+      <li><a href="#find"><span class="n">7</span> Finding & flags</a></li>
+      <li><a href="#fix"><span class="n">8</span> Fixing mistakes</a></li>
+    </ol>
+  </div>
+
+  <section id="login">
+    <h2><span class="num">1</span> Signing in</h2>
+    <p class="lead">Open the app link on your phone or PC and log in.</p>
+    <div class="steps">
+      <div class="step"><b>Open the app</b><p>Use the link your manager sent. On the counter iPad it's already set up.</p></div>
+      <div class="step"><b>Enter your ORMS email &amp; password</b><p>Use your own <b>@orms.co.za</b> login. Don't have one yet? Ask Arno or Bronwyn to set you up.</p></div>
+    </div>
+    <div class="callout">💡 <b>Tip:</b> On your phone you can "Add to Home Screen" so it opens like an app.</div>
+  </section>
+
+  <section id="screen">
+    <h2><span class="num">2</span> The main screen</h2>
+    <p class="lead">When you log in you'll see the pulse of your branch.</p>
+    <ul class="plain">
+      <li><b>Summary tiles</b> at the top — <b>Pending · Active · Urgent · Stuck</b> counts. Tap one to jump straight to it.</li>
+      <li><b>Three tabs:</b> <b>Pending</b> (booked / in transit), <b>Active</b> (in the workshop or back at the branch waiting), <b>Collected</b> (done).</li>
+      <li><b>Search box</b> — find any repair by job number, client name, phone number or notes.</li>
+      <li><b>Branch filters</b> — show only Cape Town, Bellville or Somerset.</li>
+    </ul>
+  </section>
+
+  <section id="log">
+    <h2><span class="num">3</span> Logging a repair</h2>
+    <p class="lead">When a client drops off an item for repair.</p>
+    <div class="steps">
+      <div class="step"><b>Pick the branch it's going to</b><p>Cape Town does the repairs, so that's usually the choice.</p></div>
+      <div class="step"><b>Fill in the details</b><p>Client name, contact number, the job number (it auto-capitalises), and the item.</p></div>
+      <div class="step"><b>Add anything useful (optional)</b><p>Tick <span class="tag urgent">🔴 URGENT</span> for rush jobs, add <b>Notes</b> like "needed by Friday", or snap a <b>condition photo</b> of the item.</p></div>
+      <div class="step"><b>Buy-in / used gear?</b><p>Tick the <b>Buy-in</b> box and add the stock code + used-gear doc number. It fills the name in as "Orms Inhouse Repair".</p></div>
+      <div class="step"><b>Tap "Log Repair"</b><p>Done! It appears at the top of the list. If that job number is already open, you'll get a gentle warning.</p></div>
+    </div>
+  </section>
+
+  <section id="update">
+    <h2><span class="num">4</span> Moving it along — the "Update" button</h2>
+    <p class="lead">Every repair has an <span class="pill amber">Update ▸</span> button. Tap it to see its journey and do the next step.</p>
+    <p style="color:var(--muted);margin-bottom:8px;">A progress bar at the top shows exactly where the repair is. The steps are:</p>
+    <div class="steps">
+      <div class="step"><b>Received by</b><p>When it arrives at Cape Town — enter who received it.</p></div>
+      <div class="step"><b>Repair Done</b><p>When the workshop has finished.</p></div>
+      <div class="step"><b>Send to Branch / Collect here</b><p>Pick which branch the client will collect from — or collect / courier straight from Cape Town.</p></div>
+      <div class="step"><b>Received by</b><p>When it arrives back at the collection branch — enter who received it.</p></div>
+      <div class="step"><b>Collect</b><p>When the client picks it up (see step 6).</p></div>
+    </div>
+    <div class="callout">The app only closes the Update screen when you tap <b>Close</b> — so you can type freely without it disappearing.</div>
+  </section>
+
+  <section id="buttons">
+    <h2><span class="num">5</span> Button colours — easy to remember</h2>
+    <p class="lead">The colour tells you what a button does.</p>
+    <div class="legend">
+      <div class="row"><span class="pill green">Green</span><span class="txt"><b>Move it to the next step</b> (Received, Repair Done, Send to Branch).</span></div>
+      <div class="row"><span class="pill blue">Blue</span><span class="txt"><b>Collect / hand it to the client</b> — the final step.</span></div>
+      <div class="row"><span class="pill red">Red</span><span class="txt"><b>Urgent, or delete.</b> Deleting needs a manager PIN.</span></div>
+    </div>
+    <p style="color:var(--muted);margin:18px 0 4px;">And each row has a <b>coloured strip</b> down its left edge showing its stage at a glance:</p>
+    <div class="stripdemo">
+      <div class="strip" style="border-color:#e8850c;">Amber — in transit</div>
+      <div class="strip" style="border-color:#4a9eff;">Blue — in the workshop</div>
+      <div class="strip" style="border-color:#2ecc71;">Green — ready to collect</div>
+      <div class="strip" style="border-color:#e5544a;">Red — urgent</div>
+    </div>
+  </section>
+
+  <section id="collect">
+    <h2><span class="num">6</span> Collecting a repair</h2>
+    <p class="lead">When the client comes to pick up their item.</p>
+    <div class="steps">
+      <div class="step"><b>Find the repair</b><p>Search the job number or client name, or use the counter iPad's collect view.</p></div>
+      <div class="step"><b>Tap the blue Collect button</b><p><span class="pill blue">✔ Collect (client is here)</span></p></div>
+      <div class="step"><b>Enter who's collecting &amp; the branch</b><p>The person's name and which branch they're collecting at.</p></div>
+      <div class="step"><b>Client signs on screen</b><p>They sign with a finger (or mouse) to confirm — it's stamped with the date and time.</p></div>
+    </div>
+    <div class="callout">Collecting somewhere else or couriering? Those options are right there in the collect screen.</div>
+  </section>
+
+  <section id="find">
+    <h2><span class="num">7</span> Finding repairs &amp; flags</h2>
+    <ul class="plain">
+      <li><b>Search</b> matches job number, client name, phone, notes and stock code.</li>
+      <li><span class="tag urgent">🔴 URGENT</span> repairs sort to the <b>top</b> of the list.</li>
+      <li><span class="tag stuck">⚠ Stuck</span> shows on repairs sitting too long. Use the <b>"⚠ Stuck only"</b> filter to see just those.</li>
+      <li><span class="tag note">📝 Notes</span> appear right on the row so you never miss "needed by Friday".</li>
+      <li>Lists show <b>10 at a time</b> with Prev / Next paging.</li>
+    </ul>
+  </section>
+
+  <section id="fix">
+    <h2><span class="num">8</span> Made a mistake? No problem</h2>
+    <p class="lead">Tapped the wrong step? It's easy to fix.</p>
+    <ul class="plain">
+      <li>Open the repair's <b>Update ▸</b> and tap <b>"↩ Undo last step"</b> — it walks the repair back one stage (even an accidental collection).</li>
+      <li>Need to change a note or urgency? Open <b>Update ▸</b> and edit them there any time.</li>
+      <li>Stuck on anything? Tap the <b>"? Help"</b> button in the app for a quick refresher.</li>
+    </ul>
+    <div class="callout">✅ <b>That's it!</b> Log it → move it along with the green buttons → collect with the blue button. You've got this.</div>
+  </section>
+
+  <footer>
+    <div>ORMS Repair Tracker · Staff Guide</div>
+    <a class="open" href="../">Open the app →</a>
+    <br><a class="top" href="#">↑ Back to top</a>
+  </footer>
+
+</div>
+</body>
+</html>
