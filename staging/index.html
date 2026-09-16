@@ -465,6 +465,19 @@
   .login-screen button{ border-radius:10px; transition:transform .08s, background .15s; }
   .login-screen button:hover{ background:#2a3444; transform:translateY(-1px); }
 
+  /* ---- Bigger touch targets on phones & tablets (collection iPad, staff phones) ---- */
+  @media (pointer: coarse){
+    button.submit, .login-screen button{ padding:15px; font-size:1rem; }
+    input[type=text], input[type=password], input[type=number], textarea, select, .search-wrap input{ padding:12px; font-size:16px; }
+    .filter-btn{ padding:11px 15px; font-size:0.9rem; }
+    .section-toggle .filter-btn{ padding:14px; font-size:0.95rem; }
+    .branch-btn{ padding:14px; font-size:0.95rem; }
+    .admin-btn, .signout-btn{ padding:10px 13px; font-size:0.85rem; }
+    #repairsBody .journey-btn, #repairsBody .delete-btn, .collect-btn, .unmatched-remove, .manual-alloc-btn{ padding:12px 15px !important; font-size:0.9rem !important; }
+    #journeyActions button{ padding:15px !important; font-size:0.95rem !important; }
+    .modal .cancel, .close-btn{ padding:11px 16px; }
+  }
+
 </style>
 </head>
 <body>
@@ -519,6 +532,7 @@
 
     <label for="jobNumber">Job Number</label>
     <input type="text" id="jobNumber" autocomplete="off" placeholder="e.g. O10S009119">
+    <div id="jobDupeWarning" style="display:none;font-size:0.78rem;color:#9a6b00;background:#fdf0dd;border:1px solid #f2d29a;border-radius:6px;padding:6px 9px;margin-top:5px;"></div>
 
     <label for="item">Item</label>
     <input type="text" id="item" autocomplete="off" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
@@ -548,7 +562,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v16</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v17</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -1630,6 +1644,7 @@
     document.getElementById('name').value = '';
     document.getElementById('contact').value = '';
     document.getElementById('jobNumber').value = '';
+    document.getElementById('jobDupeWarning').style.display = 'none';
     document.getElementById('item').value = '';
     document.getElementById('notes').value = '';
     document.getElementById('urgentCheck').checked = false;
@@ -1668,6 +1683,27 @@
       document.getElementById('contact').value = '';
       const nameField = document.getElementById('name');
       if(!nameField.value.trim()) nameField.value = 'Orms Inhouse Repair';
+    }
+  });
+
+  // Job number: force uppercase as they type, and gently warn on duplicates.
+  document.getElementById('jobNumber').addEventListener('input', (e) => {
+    const up = e.target.value.toUpperCase();
+    if(up !== e.target.value){
+      const pos = e.target.selectionStart;
+      e.target.value = up;
+      try { e.target.setSelectionRange(pos, pos); } catch(_){}
+    }
+    const val = up.trim();
+    const warn = document.getElementById('jobDupeWarning');
+    if(!val){ warn.style.display = 'none'; return; }
+    const dupe = repairs.find(r => !r.collected && r.job_number && r.job_number.toUpperCase() === val);
+    if(dupe){
+      warn.style.display = 'block';
+      warn.innerHTML = '⚠ Already open: <b>' + escapeHtml(dupe.job_number) + '</b> — ' + escapeHtml(dupe.name || '') +
+        ' (' + escapeHtml((STAGE_LABELS[dupe.stage] || dupe.stage || 'logged')) + '). You can still log it if this is separate.';
+    } else {
+      warn.style.display = 'none';
     }
   });
 
