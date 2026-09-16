@@ -547,7 +547,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v14</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v15</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -2478,9 +2478,19 @@
     }
     // 3) Repair done → send to a branch for collection, or collect/courier here
     if(!r.transit_back_at && !r.return_received_at){
-      const s1 = jBtn('Send to a Branch for Collection');
-      s1.onclick = () => sendBackFlow(r);
-      box.appendChild(s1);
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--gray-border,#e3e7ec);border-radius:9px;';
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:0.82rem;font-weight:600;';
+      lbl.textContent = 'Send to which branch for collection?';
+      const sel = document.createElement('select');
+      sel.style.cssText = 'padding:10px;border:1px solid var(--gray-border,#ccc);border-radius:6px;font-size:0.9rem;';
+      ['Cape Town','Bellville','Somerset'].forEach(bn => { const o = document.createElement('option'); o.value = bn; o.textContent = bn; sel.appendChild(o); });
+      sel.value = r.logged_by_branch || 'Bellville';
+      const s1 = jBtn('Send to Branch');
+      s1.onclick = () => applyStage(r, { stage:'in_transit_back', transit_back_at:now(), return_branch: sel.value });
+      wrap.appendChild(lbl); wrap.appendChild(sel); wrap.appendChild(s1);
+      box.appendChild(wrap);
       const s2 = jBtn('Collect / Courier from ' + (r.branch || 'here'), 'background:#1565c0;color:#fff;');
       s2.onclick = () => { closeJourney(); openCollectModal(r.id); };
       box.appendChild(s2);
@@ -2497,23 +2507,6 @@
     const c = jBtn('✔ Collect (client is here)', 'background:#1565c0;color:#fff;font-weight:600;');
     c.onclick = () => { closeJourney(); openCollectModal(r.id); };
     box.appendChild(c);
-  }
-
-  function sendBackFlow(r){
-    const box = document.getElementById('journeyActions');
-    box.innerHTML = '';
-    const label = document.createElement('div');
-    label.style.cssText = 'font-size:0.85rem;font-weight:600;';
-    label.textContent = 'Send to which branch for the client to collect?';
-    box.appendChild(label);
-    const sel = document.createElement('select');
-    sel.style.cssText = 'padding:10px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;';
-    ['Cape Town','Bellville','Somerset'].forEach(bn => { const o = document.createElement('option'); o.value = bn; o.textContent = bn; sel.appendChild(o); });
-    sel.value = r.logged_by_branch || 'Bellville';
-    box.appendChild(sel);
-    const b = jBtn('Send');
-    b.onclick = () => applyStage(r, { stage:'in_transit_back', transit_back_at:new Date().toISOString(), return_branch: sel.value });
-    box.appendChild(b);
   }
 
   function captureName(r, kind){
