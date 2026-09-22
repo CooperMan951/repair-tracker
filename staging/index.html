@@ -598,7 +598,7 @@
     </div>
 
     <button class="submit" id="submitBtn">Log Repair</button>
-    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v21</div>
+    <div style="text-align:center;font-size:0.7rem;color:#aaa;margin-top:6px;">stage-build v22</div>
   </div>
 
   <div class="card" id="repairsCard">
@@ -2163,7 +2163,10 @@
     // Reset the new "collected by" / "collecting at" fields.
     document.getElementById('collectedByInput').value = '';
     const rec = repairs.find(x => x.id === id);
-    document.getElementById('collectedBranchSelect').value = (rec && rec.branch) ? rec.branch : 'Cape Town';
+    // Default to the branch the current user is logged in at (where they're
+    // physically collecting), falling back to the repair's branch.
+    const myBranch = USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()];
+    document.getElementById('collectedBranchSelect').value = myBranch || (rec && rec.branch) || 'Cape Town';
     // At the collection station, keep the modal simple: photo + signature only.
     const courierRow = document.getElementById('courierCheckRow');
     const loanRow = document.getElementById('loanReturnCheckRow');
