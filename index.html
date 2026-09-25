@@ -28,18 +28,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ORMS Repair Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
-    --black:#111111;
+    --black:#1e2632;
     --white:#ffffff;
-    --gray-bg:#f4f4f4;
-    --gray-border:#dcdcdc;
-    --gray-text:#555;
+    --gray-bg:#eef1f5;
+    --gray-border:#e3e7ec;
+    --gray-text:#5b6673;
     --yellow:#ffe14d;
     --green:#1d8a3f;
     --red:#c0392b;
+    --accent:#e8850c;
+    --accent-soft:#fdf0dd;
+    --surface:#ffffff;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(20,30,45,.06), 0 6px 20px rgba(20,30,45,.06);
   }
   *{box-sizing:border-box;}
   html, body{ max-width:100%; overflow-x:hidden; }
@@ -410,6 +418,102 @@
       text-transform:uppercase;
     }
   }
+  /* ============ Visual refresh ============ */
+  body{ font-family:'Inter','Segoe UI',system-ui,-apple-system,Arial,sans-serif; -webkit-font-smoothing:antialiased; letter-spacing:-.05px; }
+  header{ border-bottom:3px solid var(--accent); box-shadow:0 2px 12px rgba(20,30,45,.14); padding:16px 22px; }
+  header h1{ font-weight:700; letter-spacing:-.3px; font-size:1.25rem; }
+  header span{ color:#aeb7c4; }
+  .container{ max-width:960px; }
+  .card{ border-radius:var(--radius); box-shadow:var(--shadow); border-color:var(--gray-border); padding:22px 24px; }
+  .card h2{ border-bottom:2px solid var(--accent); display:inline-block; padding-bottom:6px; font-weight:700; letter-spacing:-.2px; font-size:1.1rem; }
+
+  input[type=text], input[type=password], input[type=number], textarea, select, .search-wrap input, .login-screen input{
+    border:1px solid var(--gray-border); border-radius:9px; transition:border-color .15s, box-shadow .15s; font-family:inherit;
+  }
+  input:focus, textarea:focus, select:focus, .search-wrap input:focus{
+    outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(232,133,12,.16);
+  }
+
+  button.submit{ border-radius:10px; box-shadow:0 2px 8px rgba(30,38,50,.18); transition:transform .08s ease, background .15s, box-shadow .15s; }
+  button.submit:hover{ background:#2a3444; transform:translateY(-1px); box-shadow:0 4px 14px rgba(30,38,50,.22); }
+  button.submit:active{ transform:translateY(0); }
+
+  .filter-btn{ transition:all .15s; border:1px solid var(--gray-border); color:var(--black); background:var(--white); font-weight:500; }
+  .filter-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .filter-btn.active{ background:var(--accent); border-color:var(--accent); color:#1e2632; font-weight:600; }
+  .section-toggle .filter-btn{ border-radius:9px; padding:11px; font-weight:600; }
+
+  .branch-btn{ border:2px solid var(--gray-border); border-radius:9px; transition:all .12s; font-weight:600; }
+  .branch-btn:hover{ border-color:var(--accent); }
+  .branch-btn.selected{ background:var(--accent); border-color:var(--accent); color:#1e2632; }
+
+  th{ background:#f6f8fa; font-weight:600; }
+  tbody tr{ transition:background .1s; }
+  @media(min-width:601px){ tbody tr:hover td{ background:#f8fafc; } }
+
+  .badge{ letter-spacing:.2px; }
+  .badge.received{ background:#e4f5ea; }
+  .badge.collected{ background:#e5edf9; }
+
+  .admin-btn, .signout-btn{ transition:all .15s; border:1px solid rgba(255,255,255,.22); border-radius:8px; }
+  .admin-btn:hover, .signout-btn:hover{ background:rgba(255,255,255,.1); border-color:var(--accent); color:#fff; }
+
+  .modal-overlay{ background:rgba(20,26,38,.5); backdrop-filter:blur(3px); }
+  .modal{ border-radius:16px; box-shadow:0 24px 70px rgba(15,20,30,.35); }
+  .toast{ background:var(--black); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.28); font-weight:500; }
+  .login-screen{ border-radius:16px; box-shadow:var(--shadow); }
+  .login-screen button{ border-radius:10px; transition:transform .08s, background .15s; }
+  .login-screen button:hover{ background:#2a3444; transform:translateY(-1px); }
+  .summary-tile:hover{ box-shadow:0 4px 14px rgba(20,30,45,.12); transform:translateY(-1px); }
+
+  /* ---- Bigger touch targets on phones & tablets (collection iPad, staff phones) ---- */
+  @media (pointer: coarse){
+    button.submit, .login-screen button{ padding:15px; font-size:1rem; }
+    input[type=text], input[type=password], input[type=number], textarea, select, .search-wrap input{ padding:12px; font-size:16px; }
+    .filter-btn{ padding:11px 15px; font-size:0.9rem; }
+    .section-toggle .filter-btn{ padding:14px; font-size:0.95rem; }
+    .branch-btn{ padding:14px; font-size:0.95rem; }
+    .admin-btn, .signout-btn{ padding:10px 13px; font-size:0.85rem; }
+    #repairsBody .journey-btn, #repairsBody .delete-btn, .collect-btn, .unmatched-remove, .manual-alloc-btn{ padding:12px 15px !important; font-size:0.9rem !important; }
+    #journeyActions button{ padding:15px !important; font-size:0.95rem !important; }
+    .modal .cancel, .close-btn{ padding:11px 16px; }
+  }
+
+  /* ============ Dark theme ============ */
+  :root{ --gray-bg:#0f141b; --gray-border:#2b3543; --gray-text:#94a1b2; }
+  body{ background:#0f141b; color:#e6ebf2; }
+  header{ background:#141a23; }
+  .card{ background:#1a212c; border-color:#2b3543; color:#e6ebf2; }
+  .card h2{ color:#f0f4f9; }
+  label{ color:#c3ccd6; }
+  input, textarea, select{ background:#232c39 !important; color:#e8edf3 !important; border-color:#2b3543 !important; }
+  input[type=checkbox]{ accent-color:var(--accent); }
+  input::placeholder, textarea::placeholder{ color:#6b7787; }
+  th{ background:#212b38 !important; color:#aeb9c7 !important; border-color:#2b3543 !important; }
+  td{ border-color:#2b3543 !important; color:#dde3ea; }
+  @media(min-width:601px){ tbody tr:hover td{ background:#212a36 !important; } }
+  @media(max-width:600px){ tbody tr{ background:#1a212c !important; border-color:#2b3543 !important; } td::before{ color:#93a0af !important; } }
+  .filter-btn{ background:#1a212c; color:#cdd6e0; border-color:#2b3543; }
+  .filter-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .filter-btn.active{ background:var(--accent); color:#14181f; }
+  .branch-btn{ background:#232c39; color:#cdd6e0; border-color:#2b3543; }
+  .branch-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .branch-btn.selected{ background:var(--accent); border-color:var(--accent); color:#14181f; }
+  .modal{ background:#1a212c !important; color:#e6ebf2; }
+  .modal h3, .modal h4{ color:#f0f4f9; }
+  .modal-overlay{ background:rgba(0,0,0,.62); }
+  .summary-tile{ background:#1a212c !important; border-color:#2b3543 !important; }
+  #jobDupeWarning{ background:rgba(232,133,12,.1) !important; border-color:rgba(232,133,12,.35) !important; color:#e8a44d !important; }
+  .login-screen{ background:#1a212c !important; color:#e6ebf2; }
+  .login-screen h2, .login-screen h1{ color:#f0f4f9; }
+  .empty{ color:#7b8698; }
+  .received-info{ color:#8b96a5 !important; }
+  .cancel, .close-btn{ background:#232c39 !important; color:#cdd6e0 !important; border-color:#2b3543 !important; }
+  .overdue-banner{ background:rgba(197,48,48,.14); color:#f0a0a0; border-color:rgba(197,48,48,.4); }
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-track{ background:#0f141b; }
+  ::-webkit-scrollbar-thumb{ background:#2b3543; border-radius:5px; }
+
 </style>
 </head>
 <body>
@@ -420,8 +524,10 @@
     <span id="connStatus"></span>
     <span id="userEmailLabel" style="font-size:0.75rem;color:#bbb;"></span>
     <button class="admin-btn" id="statsBtn" style="display:none;">Stats</button>
+    <button class="admin-btn" id="exportBtn" style="display:none;">⬇ Export</button>
     <button class="admin-btn" id="unmatchedBtn" style="display:none;">Unmatched</button>
     <button class="admin-btn" id="adminBtn" style="display:none;">Admin</button>
+    <button class="admin-btn" id="helpBtn" style="display:none;">? Help</button>
     <button class="admin-btn" id="changePwBtn" style="display:none;">Password</button>
     <button class="signout-btn" id="signOutBtn" style="display:none;">Sign out</button>
   </div>
@@ -458,9 +564,21 @@
 
     <label for="jobNumber">Job Number</label>
     <input type="text" id="jobNumber" autocomplete="off" placeholder="e.g. O10S009119">
+    <div id="jobDupeWarning" style="display:none;font-size:0.78rem;color:#9a6b00;background:#fdf0dd;border:1px solid #f2d29a;border-radius:6px;padding:6px 9px;margin-top:5px;"></div>
 
     <label for="item">Item</label>
     <input type="text" id="item" autocomplete="off" placeholder="e.g. 10x42 M5 Binos - Loan Unit">
+
+    <label for="notes" style="margin-top:10px;">Notes (optional)</label>
+    <textarea id="notes" rows="2" autocomplete="off" placeholder="e.g. URGENT — client needs it back by Fri 12th" style="width:100%;padding:9px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;font-family:inherit;resize:vertical;"></textarea>
+
+    <div id="urgentCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" id="urgentCheck" style="width:auto;">
+      <label for="urgentCheck" style="margin:0;">🔴 Mark as urgent</label>
+    </div>
+
+    <label for="intakePhoto" style="margin-top:12px;">Condition photo on intake (optional)</label>
+    <input type="file" id="intakePhoto" accept="image/*" capture="environment">
 
     <div id="buyinCheckRow" style="margin-top:14px;display:flex;align-items:center;gap:8px;">
       <input type="checkbox" id="buyinCheck" style="width:auto;">
@@ -490,6 +608,8 @@
 
     <div class="search-wrap" id="searchWrap"></div>
 
+    <div id="summaryCards" style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;"></div>
+
     <div class="section-toggle" id="sectionToggle">
       <div class="filter-btn active" data-section="pending">Pending</div>
       <div class="filter-btn" data-section="active">Active</div>
@@ -502,6 +622,7 @@
         <div class="filter-btn" data-filter="Cape Town">Cape Town</div>
         <div class="filter-btn" data-filter="Bellville">Bellville</div>
         <div class="filter-btn" data-filter="Somerset">Somerset</div>
+        <div class="filter-btn" id="stuckToggle" style="margin-left:auto;border-color:#f5b5b5;color:#c0392b;">⚠ Stuck only</div>
       </div>
 
       <table id="repairsTable">
@@ -513,13 +634,18 @@
             <th>Item</th>
             <th>Name</th>
             <th>Contact</th>
-            <th>Status</th>
+            <th>Stage</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="repairsBody"></tbody>
       </table>
       <div class="empty" id="emptyState" style="display:none;">No repairs logged yet.</div>
+      <div id="activePagination" style="display:none;align-items:center;justify-content:center;gap:14px;margin-top:14px;">
+        <button id="activePrev" class="filter-btn" style="cursor:pointer;">← Prev</button>
+        <span id="activePageInfo" style="font-size:0.85rem;color:var(--gray-text);"></span>
+        <button id="activeNext" class="filter-btn" style="cursor:pointer;">Next →</button>
+      </div>
     </div>
 
     <div id="collectedSection" style="display:none;">
@@ -751,6 +877,65 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="helpModal">
+  <div class="modal" style="max-width:560px;max-height:88vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <h3 style="margin:0;">How the Repair Tracker works</h3>
+      <button class="cancel" id="closeHelp" style="padding:5px 12px;">Close</button>
+    </div>
+    <div style="font-size:0.88rem;line-height:1.55;color:#d7dee6;">
+      <p style="margin-bottom:12px;">This app follows a repair from the moment it's booked in until the client collects it — one record the whole way, so nothing gets lost between branches.</p>
+
+      <div style="font-weight:700;margin:14px 0 4px;">The three tabs</div>
+      <ul style="margin:0 0 8px 18px;padding:0;">
+        <li><b>Pending</b> — booked in and on its way (in transit).</li>
+        <li><b>Active</b> — at Cape Town being worked on, or back at a branch waiting for the client.</li>
+        <li><b>Collected</b> — done and collected.</li>
+      </ul>
+
+      <div style="font-weight:700;margin:14px 0 4px;">Logging a repair</div>
+      <p style="margin:0 0 8px;">Pick the branch it's going to, fill in the client + job details, and tap <b>Log Repair</b>. Tick <b>🔴 Urgent</b> for rush jobs (they jump to the top), add <b>Notes</b> (e.g. "needed by Friday"), and optionally snap a <b>condition photo</b>.</p>
+
+      <div style="font-weight:700;margin:14px 0 4px;">Moving it along — the "Update ▸" button</div>
+      <p style="margin:0 0 6px;">Tap <b>Update ▸</b> on any repair to see its journey and do the next step:</p>
+      <ol style="margin:0 0 8px 18px;padding:0;">
+        <li><b>Received by</b> — when it arrives at Cape Town (enter who received it).</li>
+        <li><b>Repair Done</b> — when the workshop is finished.</li>
+        <li><b>Send to Branch</b> — pick where the client will collect (or Collect/Courier from Cape Town).</li>
+        <li><b>Received by</b> — when it arrives back at the branch.</li>
+        <li><b>Collect</b> — when the client picks it up (name + signature).</li>
+      </ol>
+
+      <div style="font-weight:700;margin:14px 0 4px;">Button colours</div>
+      <ul style="margin:0 0 8px 18px;padding:0;">
+        <li><span style="color:#1d8a3f;font-weight:600;">Green</span> = move to the next step.</li>
+        <li><span style="color:#1565c0;font-weight:600;">Blue</span> = collect / hand to the client.</li>
+        <li><span style="color:#c0392b;font-weight:600;">Red</span> = urgent or delete.</li>
+      </ul>
+
+      <div style="font-weight:700;margin:14px 0 4px;">Handy extras</div>
+      <ul style="margin:0 0 4px 18px;padding:0;">
+        <li><b>Search</b> finds by job number, name, contact, notes or stock code.</li>
+        <li><b>⚠ Stuck only</b> shows repairs sitting too long.</li>
+        <li>Made a mistake? Open <b>Update ▸</b> and use <b>↩ Undo last step</b>.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="journeyModal">
+  <div class="modal" style="max-width:520px;max-height:88vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <h3 style="margin:0;">Repair Journey</h3>
+      <button class="cancel" id="closeJourney" style="padding:5px 12px;">Close</button>
+    </div>
+    <div id="journeySub" style="font-size:0.85rem;color:var(--gray-text);margin-bottom:12px;"></div>
+    <div id="journeyStepper" style="margin-bottom:14px;"></div>
+    <div id="journeyTimeline"></div>
+    <div id="journeyActions" style="margin-top:16px;display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
+</div>
+
 <script>
   const SUPABASE_URL = "https://puchyzyhtdsqqzuefdlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_J3J-_nT32q6Fb4knbp16uQ_a_-I14ag";
@@ -764,9 +949,12 @@
   let repairs = [];
   let searchQuery = "";
   let activeSection = "pending";
+  let stuckOnly = false;
   let collectedFilter = "All";
   let collectedPage = 1;
   const COLLECTED_PER_PAGE = 10;
+  let activePage = 1;
+  const ACTIVE_PER_PAGE = 10;
 
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 3; // 3-month overdue threshold
 
@@ -811,6 +999,7 @@
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appContent').style.display = 'block';
     document.getElementById('signOutBtn').style.display = 'inline-block';
+    document.getElementById('helpBtn').style.display = 'inline-block';
     document.getElementById('userEmailLabel').textContent = email;
 
     // Admin/management buttons — never for the collection station.
@@ -818,6 +1007,7 @@
     document.getElementById('adminBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
     document.getElementById('changePwBtn').style.display = (!collectionMode) ? 'inline-block' : 'none';
     document.getElementById('statsBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
+    document.getElementById('exportBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
     document.getElementById('unmatchedBtn').style.display = (isAdmin && !collectionMode) ? 'inline-block' : 'none';
 
     if(collectionMode){
@@ -898,10 +1088,55 @@
     document.getElementById('adminModal').classList.add('show');
   });
 
+  document.getElementById('helpBtn').addEventListener('click', () => {
+    document.getElementById('helpModal').classList.add('show');
+  });
+  document.getElementById('closeHelp').addEventListener('click', () => {
+    document.getElementById('helpModal').classList.remove('show');
+  });
+  document.getElementById('helpModal').addEventListener('click', (e) => {
+    if(e.target === document.getElementById('helpModal')) document.getElementById('helpModal').classList.remove('show');
+  });
+
   document.getElementById('statsBtn').addEventListener('click', () => {
     renderStats();
     document.getElementById('statsModal').classList.add('show');
   });
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    exportRepairsCsv();
+  });
+  function exportRepairsCsv(){
+    const cols = [
+      ['Job #','job_number'], ['Client','name'], ['Contact','contact_number'],
+      ['Item','item'], ['Stage','stage'], ['Urgent', r => r.is_urgent ? 'Yes' : ''],
+      ['To Branch','branch'], ['Logged By Branch','logged_by_branch'], ['Logged By','logged_by_name'],
+      ['Return Branch','return_branch'], ['Notes','notes'],
+      ['Buy-in', r => r.is_buyin ? 'Yes' : ''], ['Stock Code','stock_code'], ['Used Gear Doc','used_gear_doc'],
+      ['Quote Amount','quote_amount'],
+      ['Logged At','created_at'], ['Received At','received_at'], ['With Tech At','with_tech_at'],
+      ['Repair Done At','repair_done_at'], ['Received At Branch','return_received_at'],
+      ['Collected At','collected_at'], ['Collected By','collected_by'], ['Collected Branch','collected_branch']
+    ];
+    const esc = (v) => {
+      if(v == null) return '';
+      const s = String(v).replace(/"/g,'""');
+      return /[",\n]/.test(s) ? '"' + s + '"' : s;
+    };
+    const rows = [cols.map(c => c[0]).join(',')];
+    repairs.forEach(r => {
+      rows.push(cols.map(c => esc(typeof c[1] === 'function' ? c[1](r) : r[c[1]])).join(','));
+    });
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'orms-repairs-' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Exported ' + repairs.length + ' repairs to CSV');
+  }
+
   document.getElementById('closeStats').addEventListener('click', () => {
     document.getElementById('statsModal').classList.remove('show');
   });
@@ -944,7 +1179,7 @@
 
     if(error){
       body.innerHTML = '<p style="color:#c0392b;font-size:0.85rem;">Couldn\u2019t load: ' + esc(error.message||'unknown') +
-        '</p><button id="retryUnmatched" style="margin-top:8px;padding:6px 14px;border:1px solid var(--gray-border);border-radius:5px;background:#fff;cursor:pointer;">Try again</button>';
+        '</p><button id="retryUnmatched" style="margin-top:8px;padding:6px 14px;border:1px solid var(--gray-border);border-radius:5px;background:#232c39;color:#cdd6e0;cursor:pointer;">Try again</button>';
       const rb = document.getElementById('retryUnmatched');
       if(rb) rb.addEventListener('click', loadUnmatched);
       return;
@@ -963,12 +1198,11 @@
       const photoBtn = u.photo_url
         ? '<button class="unmatched-view" data-path="' + esc(u.photo_url) + '" style="font-size:0.8rem;color:#1d4f8a;background:none;border:none;text-decoration:underline;cursor:pointer;padding:0;">📷 View slip</button>'
         : '';
-      // For slips whose number couldn't be read, offer a manual entry box that
-      // looks up the repair and allocates the collection to it.
-      const manualAlloc = !u.read_number
-        ? '<input type="text" class="manual-num-input" placeholder="Enter job #" style="font-size:0.8rem;padding:5px 8px;border:1px solid var(--gray-border,#ccc);border-radius:5px;width:140px;">'
-          + '<button class="manual-alloc-btn" data-slip-id="' + esc(String(u.id||'')) + '" data-photo="' + esc(u.photo_url||'') + '" style="font-size:0.78rem;padding:5px 12px;background:#1d8a3f;color:#fff;border:none;border-radius:5px;cursor:pointer;">Allocate</button>'
-        : '';
+      // Manual entry box on every slip. If a number is already saved it's
+      // pre-filled, so you can re-try allocation once the repair is logged.
+      const manualAlloc =
+        '<input type="text" class="manual-num-input" placeholder="Enter job #" value="' + esc(u.read_number || '') + '" style="font-size:0.8rem;padding:5px 8px;border:1px solid var(--gray-border,#ccc);border-radius:5px;width:140px;">'
+        + '<button class="manual-alloc-btn" data-slip-id="' + esc(String(u.id||'')) + '" data-photo="' + esc(u.photo_url||'') + '" style="font-size:0.78rem;padding:5px 12px;background:#1d8a3f;color:#fff;border:none;border-radius:5px;cursor:pointer;">Allocate</button>';
       h += '<div style="border:1px solid var(--gray-border,#dcdcdc);border-radius:8px;padding:12px;margin-bottom:10px;">'
         + '<div style="font-weight:600;">' + rn + '</div>'
         + '<div style="font-size:0.78rem;color:var(--gray-text,#555);margin-top:2px;">' + esc(u.branch||'—') + ' &middot; ' + esc(u.scanned_by||'') + ' &middot; ' + esc(when) + '</div>'
@@ -1026,8 +1260,17 @@
           btn.disabled = false; btn.textContent = 'Allocate'; return;
         }
         if(!matches || matches.length === 0){
-          if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'No repair found with number ' + num + '. It may not be logged yet.'; }
-          btn.disabled = false; btn.textContent = 'Allocate'; return;
+          // No repair logged yet — still save the typed number onto the slip so
+          // it's recorded, and can be allocated once the repair is logged.
+          const { error: saveErr } = await sb.from('unmatched_collections')
+            .update({ read_number: num }).eq('id', btn.dataset.slipId);
+          if(saveErr){
+            if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Error saving: ' + saveErr.message; }
+            btn.disabled = false; btn.textContent = 'Allocate'; return;
+          }
+          if(msg){ msg.style.color = '#9a6b00'; msg.textContent = 'No job logged for ' + num + ' yet — number saved to this slip. Allocate again once it\u2019s logged.'; }
+          setTimeout(loadUnmatched, 1400);
+          return;
         }
 
         // Prefer a not-yet-collected match.
@@ -1035,7 +1278,7 @@
 
         // Mark the repair collected.
         const { error: upErr } = await sb.from('repairs')
-          .update({ collected: true, collected_at: new Date().toISOString() })
+          .update({ collected: true, collected_at: new Date().toISOString(), stage: 'collected' })
           .eq('id', target.id);
         if(upErr){
           if(msg){ msg.style.color = '#c0392b'; msg.textContent = 'Error: ' + upErr.message; }
@@ -1090,6 +1333,20 @@
     showToast('Password updated successfully');
   });
 
+  // Flag repairs sitting too long at a stage (outer scope: used by both the
+  // Stats panel and the main render).
+  function isStuck(r){
+    if(r.collected) return null;
+    const days = (ts) => ts ? (Date.now() - new Date(ts).getTime()) / 86400000 : 0;
+    const s = r.stage || '';
+    if(s === 'with_tech' && !r.repair_done_at && days(r.with_tech_at) > 14) return 'With tech ' + Math.floor(days(r.with_tech_at)) + 'd';
+    if(s === 'in_transit' && days(r.transit_at) > 7) return 'In transit ' + Math.floor(days(r.transit_at)) + 'd';
+    if(s === 'in_transit_back' && days(r.transit_back_at) > 7) return 'In transit ' + Math.floor(days(r.transit_back_at)) + 'd';
+    if(s === 'return_received' && days(r.return_received_at) > 30) return 'Uncollected ' + Math.floor(days(r.return_received_at)) + 'd';
+    if(s === 'repair_done' && days(r.repair_done_at) > 30) return 'Uncollected ' + Math.floor(days(r.repair_done_at)) + 'd';
+    return null;
+  }
+
   function renderStats(){
     const all = repairs;
     const now = Date.now();
@@ -1118,6 +1375,16 @@
     const colTimes = all.filter(r => r.collected_at && r.received_at)
       .map(r => (new Date(r.collected_at) - new Date(r.received_at)) / 86400000);
     const avgCollect = colTimes.length ? (colTimes.reduce((a,b)=>a+b,0)/colTimes.length) : null;
+
+    // Turnaround analytics: time with technician, full logged->collected, urgent/stuck
+    const techTimes = all.filter(r => r.with_tech_at && r.repair_done_at)
+      .map(r => (new Date(r.repair_done_at) - new Date(r.with_tech_at)) / 86400000);
+    const avgTech = techTimes.length ? (techTimes.reduce((a,b)=>a+b,0)/techTimes.length) : null;
+    const fullTimes = all.filter(r => r.created_at && r.collected_at)
+      .map(r => (new Date(r.collected_at) - new Date(r.created_at)) / 86400000);
+    const avgFull = fullTimes.length ? (fullTimes.reduce((a,b)=>a+b,0)/fullTimes.length) : null;
+    const urgentOpen = all.filter(r => r.is_urgent && !r.collected).length;
+    const stuckCount = all.filter(r => isStuck(r)).length;
 
     // Overdue (received, not collected, >3 months)
     const SIX = 1000*60*60*24*30*3;
@@ -1150,6 +1417,14 @@
       ${statCard(last30.length, 'Logged (last 30 days)', '#111')}
       ${statCard(avgReceive !== null ? avgReceive.toFixed(1) + ' hrs' : '—', 'Avg. time to receive', '#111')}
       ${statCard(avgCollect !== null ? avgCollect.toFixed(1) + ' days' : '—', 'Avg. time to collect', '#111')}
+    </div>`;
+
+    // Turnaround analytics
+    h += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;">
+      ${statCard(avgTech !== null ? avgTech.toFixed(1) + ' days' : '—', 'Avg. with technician', '#1d4f8a')}
+      ${statCard(avgFull !== null ? avgFull.toFixed(1) + ' days' : '—', 'Avg. logged → collected', '#1d4f8a')}
+      ${statCard(urgentOpen, 'Urgent (open)', '#c0392b')}
+      ${statCard(stuckCount, 'Stuck repairs', '#c0392b')}
     </div>`;
 
     // Per-branch table
@@ -1264,6 +1539,7 @@
 
   document.getElementById('searchInput').addEventListener('input', async (e) => {
     searchQuery = e.target.value.trim().toLowerCase();
+    activePage = 1;
     await renderTable();
   });
 
@@ -1273,8 +1549,29 @@
     document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeSection = btn.dataset.section;
+    activePage = 1;
     document.getElementById('activeSection').style.display = (activeSection === 'pending' || activeSection === 'active') ? 'block' : 'none';
     document.getElementById('collectedSection').style.display = activeSection === 'collected' ? 'block' : 'none';
+    await renderTable();
+  });
+
+  document.getElementById('summaryCards').addEventListener('click', async (e) => {
+    const tile = e.target.closest('.summary-tile');
+    if(!tile) return;
+    const action = tile.dataset.action;
+    if(action === 'pending' || action === 'active' || action === 'urgent'){
+      const target = action === 'urgent' ? 'pending' : action;
+      activeSection = target;
+      document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.section === target));
+      document.getElementById('activeSection').style.display = 'block';
+      document.getElementById('collectedSection').style.display = 'none';
+      activePage = 1;
+    } else if(action === 'stuck'){
+      stuckOnly = !stuckOnly;
+      const st = document.getElementById('stuckToggle');
+      if(st) st.classList.toggle('active', stuckOnly);
+      activePage = 1;
+    }
     await renderTable();
   });
 
@@ -1291,9 +1588,17 @@
   document.getElementById('filters').addEventListener('click', async (e) => {
     const btn = e.target.closest('.filter-btn');
     if(!btn) return;
-    document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.remove('active'));
+    if(btn.id === 'stuckToggle'){
+      stuckOnly = !stuckOnly;
+      btn.classList.toggle('active', stuckOnly);
+      activePage = 1;
+      await renderTable();
+      return;
+    }
+    document.querySelectorAll('#filters .filter-btn:not(#stuckToggle)').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeFilter = btn.dataset.filter;
+    activePage = 1;
     await renderTable();
   });
 
@@ -1314,14 +1619,24 @@
     collectedPage++; await renderTable(); // renderTable clamps to max page
   });
 
+  document.getElementById('activePrev').addEventListener('click', async () => {
+    if(activePage > 1){ activePage--; await renderTable(); }
+  });
+  document.getElementById('activeNext').addEventListener('click', async () => {
+    activePage++; await renderTable(); // renderTable clamps to max page
+  });
+
   document.getElementById('submitBtn').addEventListener('click', async () => {
     const name = document.getElementById('name').value.trim();
     const contact = document.getElementById('contact').value.trim();
     const jobNumber = document.getElementById('jobNumber').value.trim();
     const item = document.getElementById('item').value.trim();
+    const notes = document.getElementById('notes').value.trim();
     const isBuyin = document.getElementById('buyinCheck').checked;
     const stockCode = document.getElementById('stockCode').value.trim();
     const usedGearDoc = document.getElementById('usedGearDoc').value.trim();
+    const isUrgent = document.getElementById('urgentCheck').checked;
+    const intakeFile = document.getElementById('intakePhoto').files[0] || null;
 
     if(!selectedBranch){
       showToast('Please select a branch');
@@ -1336,16 +1651,39 @@
     submitBtn.disabled = true;
     submitBtn.textContent = 'Logging…';
 
+    const loggerBranch = USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown';
+    const willTransit = selectedBranch !== loggerBranch;
+    const nowIso = new Date().toISOString();
+
+    // Optional intake condition photo (compressed for light PC viewing)
+    let intakePhotoUrl = null;
+    if(intakeFile){
+      try {
+        submitBtn.textContent = 'Uploading photo…';
+        const cf = await compressImage(intakeFile);
+        const path = jobNumber + '-intake-' + Date.now() + '.jpg';
+        const { error: upErr } = await sb.storage.from('collection-photos').upload(path, cf);
+        if(!upErr) intakePhotoUrl = path;
+      } catch(e){}
+      submitBtn.textContent = 'Logging…';
+    }
+
     const { data, error } = await sb.from('repairs').insert({
       branch: selectedBranch,
       name: name,
       contact_number: contact,
       job_number: jobNumber,
       item: item,
+      notes: notes || null,
+      is_urgent: isUrgent,
+      intake_photo_url: intakePhotoUrl,
       is_buyin: isBuyin,
       stock_code: isBuyin ? stockCode : null,
       used_gear_doc: isBuyin ? usedGearDoc : null,
-      logged_by_branch: USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()] || 'Unknown'
+      logged_by_branch: loggerBranch,
+      logged_by_name: currentUserName(),
+      stage: willTransit ? 'in_transit' : 'logged',
+      transit_at: willTransit ? nowIso : null
     }).select().single();
 
     submitBtn.disabled = false;
@@ -1356,19 +1694,15 @@
       return;
     }
 
-    // Add to local array and switch to Pending so it's visible immediately
-    repairs.unshift(data);
-    activeSection = 'pending';
-    document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('#sectionToggle .filter-btn[data-section="pending"]').classList.add('active');
-    document.getElementById('activeSection').style.display = 'block';
-    document.getElementById('collectedSection').style.display = 'none';
-    await renderTable();
-
+    // Clear the form and confirm FIRST, so nothing downstream can hide the result.
     document.getElementById('name').value = '';
     document.getElementById('contact').value = '';
     document.getElementById('jobNumber').value = '';
+    document.getElementById('jobDupeWarning').style.display = 'none';
     document.getElementById('item').value = '';
+    document.getElementById('notes').value = '';
+    document.getElementById('urgentCheck').checked = false;
+    document.getElementById('intakePhoto').value = '';
     document.getElementById('buyinCheck').checked = false;
     document.getElementById('buyinFields').style.display = 'none';
     document.getElementById('contactRow').style.display = 'block';
@@ -1377,6 +1711,21 @@
     document.querySelectorAll('.branch-btn').forEach(b => b.classList.remove('selected'));
     selectedBranch = null;
     showToast('Repair logged');
+
+    // Show it: switch to Pending and to "All" branches so the new repair
+    // (which is sent to Cape Town) is always visible to whoever logged it.
+    if(data) repairs.unshift(data);
+    activeSection = 'pending';
+    activeFilter = 'All';
+    document.querySelectorAll('#sectionToggle .filter-btn').forEach(b => b.classList.remove('active'));
+    const pendBtn = document.querySelector('#sectionToggle .filter-btn[data-section="pending"]');
+    if(pendBtn) pendBtn.classList.add('active');
+    document.querySelectorAll('#filters .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'All'));
+    stuckOnly = false;
+    activePage = 1;
+    document.getElementById('activeSection').style.display = 'block';
+    document.getElementById('collectedSection').style.display = 'none';
+    try { await renderTable(); } catch(e){ console.error('render after log failed:', e); }
   });
 
   // Buy-in tick: reveal stock/doc fields and pre-fill the standard in-house name.
@@ -1388,6 +1737,27 @@
       document.getElementById('contact').value = '';
       const nameField = document.getElementById('name');
       if(!nameField.value.trim()) nameField.value = 'Orms Inhouse Repair';
+    }
+  });
+
+  // Job number: force uppercase as they type, and gently warn on duplicates.
+  document.getElementById('jobNumber').addEventListener('input', (e) => {
+    const up = e.target.value.toUpperCase();
+    if(up !== e.target.value){
+      const pos = e.target.selectionStart;
+      e.target.value = up;
+      try { e.target.setSelectionRange(pos, pos); } catch(_){}
+    }
+    const val = up.trim();
+    const warn = document.getElementById('jobDupeWarning');
+    if(!val){ warn.style.display = 'none'; return; }
+    const dupe = repairs.find(r => !r.collected && r.job_number && r.job_number.toUpperCase() === val);
+    if(dupe){
+      warn.style.display = 'block';
+      warn.innerHTML = '⚠ Already open: <b>' + escapeHtml(dupe.job_number) + '</b> — ' + escapeHtml(dupe.name || '') +
+        ' (' + escapeHtml((STAGE_LABELS[dupe.stage] || dupe.stage || 'logged')) + '). You can still log it if this is separate.';
+    } else {
+      warn.style.display = 'none';
     }
   });
 
@@ -1756,7 +2126,8 @@
     const { error } = await sb.from('repairs').update({
       collected: true,
       collected_at: new Date().toISOString(),
-      collected_photo_url: photoUrl
+      collected_photo_url: photoUrl,
+      stage: 'collected'
     }).eq('id', scanMatchedId);
 
     btn.disabled = false; btn.textContent = 'Mark Collected';
@@ -1765,7 +2136,7 @@
 
     const r = repairs.find(x => x.id === scanMatchedId);
     if(r){
-      r.collected = true;
+      r.collected = true; r.stage = "collected";
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
       await renderTable();
@@ -1787,7 +2158,10 @@
     // Reset the new "collected by" / "collecting at" fields.
     document.getElementById('collectedByInput').value = '';
     const rec = repairs.find(x => x.id === id);
-    document.getElementById('collectedBranchSelect').value = (rec && rec.branch) ? rec.branch : 'Cape Town';
+    // Default to the branch the current user is logged in at (where they're
+    // physically collecting), falling back to the repair's branch.
+    const myBranch = USER_BRANCH_MAP[document.getElementById('userEmailLabel').textContent.toLowerCase()];
+    document.getElementById('collectedBranchSelect').value = myBranch || (rec && rec.branch) || 'Cape Town';
     // At the collection station, keep the modal simple: photo + signature only.
     const courierRow = document.getElementById('courierCheckRow');
     const loanRow = document.getElementById('loanReturnCheckRow');
@@ -1977,6 +2351,7 @@
       signature_url: signatureUrl,
       collected_by: collectedBy || null,
       collected_branch: collectedBranch || null,
+      stage: 'collected',
       is_courier: isCourier,
       courier_address: isCourier ? courierAddress : null,
       waybill_url: waybillUrl,
@@ -2020,7 +2395,7 @@
     document.getElementById('collectModal').classList.remove('show');
 
     if(r){
-      r.collected = true;
+      r.collected = true; r.stage = "collected";
       r.collected_at = new Date().toISOString();
       r.collected_photo_url = photoUrl;
       r.signature_url = signatureUrl;
@@ -2118,7 +2493,7 @@
 
   function matchesSearch(r){
     if(!searchQuery) return true;
-    const haystack = [r.name, r.contact_number, r.job_number, r.item, r.stock_code, r.used_gear_doc].join(' ').toLowerCase();
+    const haystack = [r.name, r.contact_number, r.job_number, r.item, r.stock_code, r.used_gear_doc, r.notes].join(' ').toLowerCase();
     return haystack.includes(searchQuery);
   }
 
@@ -2126,6 +2501,377 @@
     if(!r.received || r.collected || !r.received_at) return false;
     return (Date.now() - new Date(r.received_at).getTime()) > SIX_MONTHS_MS;
   }
+
+  // ===== Stage Journey =====
+  const STAGE_LABELS = {
+    logged:'Logged', in_transit:'In Transit to Cape Town', received:'Received in Cape Town',
+    with_tech:'With Technician', repair_done:'Repair Done',
+    in_transit_back:'In Transit back', return_received:'Received at branch', collected:'Collected'
+  };
+  function displayNameFromEmail(email){
+    const p = (email||'').split('@')[0];
+    const n = p.split(/[._]/).filter(Boolean).map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+    return n || email || '';
+  }
+  function currentUserName(){
+    return displayNameFromEmail(document.getElementById('userEmailLabel').textContent);
+  }
+  function needsTransit(r){
+    return (r.branch||'') !== (r.logged_by_branch||'');
+  }
+  // Which Pending/Active tab a repair belongs in, based on its stage.
+  function tabOf(r){
+    if(r.collected) return 'collected';
+    const s = r.stage || (r.received ? 'received' : 'logged');
+    if(s === 'logged' || s === 'in_transit' || s === 'in_transit_back') return 'pending';
+    return 'active';
+  }
+  // Which branch a repair is "at"/heading to right now (for branch filtering).
+  function relevantBranch(r){
+    const s = r.stage || '';
+    if(s === 'in_transit_back' || s === 'return_received') return r.return_branch || r.logged_by_branch || r.branch;
+    return r.branch;
+  }
+  // Colour for the left strip on each row / summary tiles
+  function stageStripColor(r){
+    if(r.is_urgent && !r.collected) return '#c0392b';
+    const s = r.stage || '';
+    if(s === 'in_transit' || s === 'in_transit_back') return '#e8850c';
+    if(s === 'return_received') return '#1d8a3f';
+    if(s === 'received' || s === 'repair_done' || s === 'with_tech') return '#1565c0';
+    if(s === 'collected') return '#8592a3';
+    return '#c9d2dc';
+  }
+  // Applicable steps for the horizontal stepper, with done flags
+  function journeySteps(r){
+    const s = [];
+    s.push({ label:'Logged', done:true });
+    if(needsTransit(r)){
+      s.push({ label:'In transit', done: !!(r.transit_at || r.received_at) });
+      s.push({ label:'Received', done: !!r.received_at });
+    }
+    s.push({ label:'Repaired', done: !!r.repair_done_at });
+    if(r.transit_back_at || r.return_received_at){
+      s.push({ label:'Return', done: !!r.transit_back_at });
+      s.push({ label:'At branch', done: !!r.return_received_at });
+    }
+    s.push({ label:'Collected', done: !!r.collected });
+    return s;
+  }
+
+  function stageBadge(r){
+    const s = r.stage || (r.collected ? 'collected' : (r.received ? 'received' : 'logged'));
+    let label = STAGE_LABELS[s] || s;
+    if(s === 'in_transit_back' && r.return_branch) label = 'In Transit to ' + r.return_branch;
+    if(s === 'return_received' && r.return_branch) label = 'At ' + r.return_branch + ' — ready to collect';
+    let bg = '#eceff4', fg = '#3a4658';
+    if(s === 'collected'){ bg = '#e0f2e9'; fg = '#1d7a44'; }
+    else if(s === 'in_transit' || s === 'in_transit_back'){ bg = '#fdf0d5'; fg = '#9a6b00'; }
+    else if(s === 'with_tech' || s === 'repair_done'){ bg = '#e7eefc'; fg = '#1d4f8a'; }
+    else if(s === 'received' || s === 'return_received'){ bg = '#eef4ec'; fg = '#3a6b3a'; }
+    return '<span style="display:inline-block;font-size:0.72rem;font-weight:600;padding:2px 9px;border-radius:10px;background:'+bg+';color:'+fg+';">'+escapeHtml(label)+'</span>';
+  }
+
+  let journeyRepairId = null;
+  function openJourney(id){
+    journeyRepairId = id;
+    const modal = document.getElementById('journeyModal');
+    document.getElementById('closeJourney').onclick = closeJourney;
+    // Deliberately no click-outside-to-close here: highlighting text in a field
+    // and releasing the mouse outside the modal would otherwise close it.
+    modal.onclick = null;
+    renderJourney();
+    modal.classList.add('show');
+  }
+  function closeJourney(){ document.getElementById('journeyModal').classList.remove('show'); journeyRepairId = null; }
+
+  function renderJourney(){
+    const r = repairs.find(x => x.id === journeyRepairId);
+    if(!r) return;
+    document.getElementById('journeySub').innerHTML =
+      (r.is_urgent ? '<span style="display:inline-block;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#c0392b;color:#fff;margin-bottom:4px;">🔴 URGENT</span><br>' : '') +
+      '<b>' + escapeHtml(r.job_number) + '</b> &middot; ' + escapeHtml(r.name) + ' &middot; ' + escapeHtml(r.item) +
+      (r.is_buyin ? ' <span style="color:#2c6e2c;">(Buy-in)</span>' : '') +
+      (r.intake_photo_url ? ' &middot; <a href="#" id="journeyIntakePhoto" style="color:var(--accent,#1d4f8a);text-decoration:underline;">📷 intake photo</a>' : '') +
+      '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:rgba(232,133,12,.09);border:1px solid rgba(232,133,12,.28);">' +
+        '<div style="font-size:0.72rem;font-weight:700;color:#e8a44d;letter-spacing:.3px;">NOTES</div>' +
+        '<div id="journeyNotesText" style="font-size:0.85rem;color:#e2cba8;white-space:pre-wrap;margin-top:2px;">' + (r.notes ? escapeHtml(r.notes) : '<span style="color:#9a8b73;font-style:italic;">No notes yet</span>') + '</div>' +
+        '<button id="journeyEditNotes" style="margin-top:6px;font-size:0.75rem;padding:4px 11px;background:#232c39;border:1px solid rgba(232,133,12,.4);color:#e8a44d;border-radius:5px;cursor:pointer;">📝 ' + (r.notes ? 'Edit notes' : 'Add notes') + '</button>' +
+        ' <button id="journeyToggleUrgent" style="margin-top:6px;font-size:0.75rem;padding:4px 11px;background:#232c39;border:1px solid ' + (r.is_urgent ? '#e5544a' : '#3a4656') + ';color:' + (r.is_urgent ? '#f0908a' : '#aeb9c7') + ';border-radius:5px;cursor:pointer;">' + (r.is_urgent ? '✓ Urgent' : 'Mark urgent') + '</button>' +
+      '</div>';
+    const editBtn = document.getElementById('journeyEditNotes');
+    if(editBtn) editBtn.onclick = () => editNotes(r);
+    const urgBtn = document.getElementById('journeyToggleUrgent');
+    if(urgBtn) urgBtn.onclick = () => applyStage(r, { is_urgent: !r.is_urgent });
+    const intakeLink = document.getElementById('journeyIntakePhoto');
+    if(intakeLink) intakeLink.onclick = (e) => { e.preventDefault(); openStorageFile(r.intake_photo_url, 'collection-photos', null, 'Intake photo — ' + (r.job_number||'')); };
+    const fmt = (t) => t ? new Date(t).toLocaleString() : '';
+    const step = (done, label, detail) =>
+      '<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid #262f3b;">'
+      + '<span style="font-size:0.95rem;line-height:1.3;">' + (done ? '✅' : '⬜') + '</span>'
+      + '<div style="flex:1;"><div style="font-weight:600;font-size:0.85rem;color:' + (done ? '#e6ebf2' : '#7b8698') + ';">' + escapeHtml(label) + '</div>'
+      + (detail ? '<div style="font-size:0.75rem;color:#8b96a5;margin-top:1px;">' + detail + '</div>' : '') + '</div></div>';
+
+    const rows = [];
+    rows.push(step(true, 'Logged', (r.logged_by_name ? escapeHtml(r.logged_by_name) : (r.logged_by_branch||'')) + (r.created_at ? ' &middot; ' + fmt(r.created_at) : '')));
+    if(needsTransit(r)){
+      rows.push(step(!!(r.transit_at || r.received_at || r.received), 'In Transit to Cape Town', fmt(r.transit_at)));
+      rows.push(step(!!r.received_at, 'Received in Cape Town', r.received_at ? escapeHtml(r.received_by||'') + ' &middot; ' + fmt(r.received_at) : ''));
+    }
+    rows.push(step(!!r.repair_done_at, 'Repair Done', fmt(r.repair_done_at)));
+    if(needsTransit(r) && (r.transit_back_at || r.return_received_at)){
+      rows.push(step(!!r.transit_back_at, 'In Transit back', fmt(r.transit_back_at)));
+      rows.push(step(!!r.return_received_at, 'Received at branch', r.return_received_at ? escapeHtml(r.return_received_by||'') + ' &middot; ' + fmt(r.return_received_at) : ''));
+    }
+    rows.push(step(!!r.collected, 'Client Collects', r.collected_at ? escapeHtml(r.collected_by||'') + ' &middot; ' + fmt(r.collected_at) + (r.collected_branch ? ' &middot; at ' + escapeHtml(r.collected_branch) : '') : ''));
+    document.getElementById('journeyTimeline').innerHTML = rows.join('');
+
+    // Horizontal progress stepper
+    const steps = journeySteps(r);
+    let lastDone = -1;
+    steps.forEach((st, i) => { if(st.done) lastDone = i; });
+    let sh = '<div style="display:flex;align-items:flex-start;overflow-x:auto;padding:4px 2px 2px;">';
+    steps.forEach((st, i) => {
+      const done = st.done;
+      const isCurrent = (i === lastDone);
+      const dotBg = done ? (isCurrent ? '#4a9eff' : '#2ecc71') : '#232c39';
+      const dotBorder = done ? dotBg : '#3a4656';
+      const dotInner = done ? (isCurrent ? '' : '✓') : '';
+      if(i > 0){
+        const lineColor = steps[i].done ? '#2ecc71' : '#2b3543';
+        sh += '<div style="flex:1;height:3px;background:' + lineColor + ';margin-top:11px;min-width:16px;"></div>';
+      }
+      sh += '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;width:58px;">'
+        + '<div style="width:24px;height:24px;border-radius:50%;background:' + dotBg + ';border:2px solid ' + dotBorder + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.7rem;font-weight:700;">' + dotInner + '</div>'
+        + '<div style="font-size:0.62rem;margin-top:4px;text-align:center;color:' + (done ? '#e6ebf2' : '#7b8698') + ';font-weight:' + (isCurrent ? '700' : '500') + ';line-height:1.15;">' + escapeHtml(st.label) + '</div>'
+        + '</div>';
+    });
+    sh += '</div>';
+    document.getElementById('journeyStepper').innerHTML = sh;
+    renderJourneyActions(r);
+    // Undo last step (if there's a completed step to revert)
+    const undo = lastStepInfo(r);
+    if(undo){
+      const box = document.getElementById('journeyActions');
+      const u = document.createElement('button');
+      u.textContent = '↩ Undo last step (' + undo.label + ')';
+      u.style.cssText = 'margin-top:10px;padding:8px;border:1px solid #3a4656;background:#232c39;color:#aeb9c7;border-radius:6px;font-size:0.8rem;cursor:pointer;';
+      u.onclick = () => confirmUndo(r, undo);
+      box.appendChild(u);
+    }
+  }
+
+  function jBtn(label, style){
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.style.cssText = 'padding:11px;border:none;border-radius:6px;font-size:0.9rem;cursor:pointer;font-family:inherit;' + (style || 'background:#1d8a3f;color:#fff;');
+    return b;
+  }
+
+  function renderJourneyActions(r){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    if(r.collected){
+      box.innerHTML = '<div style="font-size:0.85rem;color:#1d7a44;font-weight:600;">✓ Complete — collected.</div>';
+      return;
+    }
+    const now = () => new Date().toISOString();
+
+    // 1) In transit → receive in Cape Town
+    if(needsTransit(r) && !r.received_at){
+      const b = jBtn('Mark Received in Cape Town');
+      b.onclick = () => captureName(r, 'received'); box.appendChild(b); return;
+    }
+    // 2) At workshop → Repair Done
+    if(!r.repair_done_at){
+      const d = jBtn('Repair Done'); d.onclick = () => applyStage(r, { stage:'repair_done', repair_done_at:now() }); box.appendChild(d);
+      return;
+    }
+    // 3) Repair done → send to a branch for collection, or collect/courier here
+    if(!r.transit_back_at && !r.return_received_at){
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--gray-border,#e3e7ec);border-radius:9px;';
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:0.82rem;font-weight:600;';
+      lbl.textContent = 'Send to which branch for collection?';
+      const sel = document.createElement('select');
+      sel.style.cssText = 'padding:10px;border:1px solid var(--gray-border,#ccc);border-radius:6px;font-size:0.9rem;';
+      ['Cape Town','Bellville','Somerset'].forEach(bn => { const o = document.createElement('option'); o.value = bn; o.textContent = bn; sel.appendChild(o); });
+      sel.value = r.logged_by_branch || 'Bellville';
+      const s1 = jBtn('Send to Branch');
+      s1.onclick = () => applyStage(r, { stage:'in_transit_back', transit_back_at:now(), return_branch: sel.value });
+      wrap.appendChild(lbl); wrap.appendChild(sel); wrap.appendChild(s1);
+      box.appendChild(wrap);
+      const s2 = jBtn('Collect / Courier from ' + (r.branch || 'here'), 'background:#1565c0;color:#fff;');
+      s2.onclick = () => { closeJourney(); openCollectModal(r.id); };
+      box.appendChild(s2);
+      return;
+    }
+    // 4) In transit back → received at branch
+    if(r.transit_back_at && !r.return_received_at){
+      const rb = jBtn('Mark Received at ' + (r.return_branch || 'branch'));
+      rb.onclick = () => captureName(r, 'return_received');
+      box.appendChild(rb);
+      return;
+    }
+    // 5) Ready for collection — blue so it's clearly distinct from the green step buttons
+    const c = jBtn('✔ Collect (client is here)', 'background:#1565c0;color:#fff;font-weight:600;');
+    c.onclick = () => { closeJourney(); openCollectModal(r.id); };
+    box.appendChild(c);
+  }
+
+  function captureName(r, kind){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:0.85rem;font-weight:600;';
+    label.textContent = kind === 'received' ? 'Received in Cape Town by:'
+      : kind === 'with_tech' ? 'Technician name:'
+      : 'Received at ' + (r.return_branch || r.logged_by_branch || 'branch') + ' by:';
+    box.appendChild(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.value = currentUserName();
+    inp.style.cssText = 'padding:10px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;';
+    box.appendChild(inp);
+    const b = jBtn('Confirm');
+    b.onclick = () => {
+      const name = (inp.value || '').trim() || currentUserName();
+      const now = new Date().toISOString();
+      let patch;
+      if(kind === 'received') patch = { stage:'received', received:true, received_at:now, received_by:name };
+      else if(kind === 'with_tech') patch = { stage:'with_tech', with_tech_at:now, with_tech_by:name };
+      else patch = { stage:'return_received', return_received_at:now, return_received_by:name };
+      applyStage(r, patch);
+    };
+    box.appendChild(b);
+    inp.focus();
+  }
+
+  function quoteFlow(r){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:0.85rem;font-weight:600;margin-bottom:2px;';
+    label.textContent = 'Attach a copy of the quote (optional):';
+    box.appendChild(label);
+
+    // Optional quote amount (Rand)
+    const amtWrap = document.createElement('div');
+    amtWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
+    const amtLabel = document.createElement('span');
+    amtLabel.textContent = 'Amount (optional): R';
+    amtLabel.style.cssText = 'font-size:0.85rem;';
+    const amtInput = document.createElement('input');
+    amtInput.type = 'number'; amtInput.step = '0.01'; amtInput.min = '0'; amtInput.placeholder = '0.00';
+    amtInput.value = (r.quote_amount != null ? r.quote_amount : '');
+    amtInput.style.cssText = 'padding:8px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;width:120px;';
+    amtWrap.appendChild(amtLabel); amtWrap.appendChild(amtInput);
+    box.appendChild(amtWrap);
+
+    // Hidden file input (opens the browser/search when the zone is clicked)
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file'; fileInput.accept = 'image/*,.pdf';
+    fileInput.style.display = 'none';
+    box.appendChild(fileInput);
+
+    // Drag-and-drop zone (also clickable to browse)
+    const zone = document.createElement('div');
+    zone.style.cssText = 'border:2px dashed var(--gray-border,#bbb);border-radius:8px;padding:20px;text-align:center;font-size:0.85rem;color:var(--gray-text,#666);cursor:pointer;transition:all .15s;background:#fafafa;';
+    zone.innerHTML = '📎 Drag &amp; drop a quote here<br><span style="font-size:0.78rem;">or click to browse / search files</span>';
+    box.appendChild(zone);
+
+    let chosenFile = null;
+    const showChosen = (f) => { chosenFile = f; zone.style.borderColor = '#1d8a3f'; zone.style.background = '#eef7ee'; zone.innerHTML = '✅ ' + escapeHtml(f.name) + '<br><span style="font-size:0.78rem;">click to choose a different file</span>'; };
+
+    zone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => { if(fileInput.files && fileInput.files[0]) showChosen(fileInput.files[0]); });
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.style.borderColor = '#1d8a3f'; zone.style.background = '#eef7ee'; });
+    zone.addEventListener('dragleave', (e) => { e.preventDefault(); if(!chosenFile){ zone.style.borderColor = 'var(--gray-border,#bbb)'; zone.style.background = '#fafafa'; } });
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) showChosen(e.dataTransfer.files[0]);
+    });
+
+    const b = jBtn('Mark Quoted');
+    b.style.marginTop = '4px';
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Saving…';
+      const patch = { quoted_at: new Date().toISOString() };
+      const amt = parseFloat(amtInput.value);
+      if(!isNaN(amt)) patch.quote_amount = amt;
+      if(chosenFile){
+        try {
+          const f = await compressImage(chosenFile, 1600, 0.82); // legible but light for PC viewing; PDFs pass through
+          const path = r.id + '-quote-' + Date.now() + (f.type.indexOf('pdf') >= 0 ? '.pdf' : '.jpg');
+          const { error: upErr } = await sb.storage.from('waybills').upload(path, f);
+          if(!upErr) patch.quote_url = path;
+        } catch(e){}
+      }
+      applyStage(r, patch);
+    };
+    box.appendChild(b);
+  }
+
+  function viewQuote(r){
+    if(!r.quote_url) return;
+    openStorageFile(r.quote_url, 'waybills', null, 'Quote — ' + (r.job_number || ''));
+  }
+
+  async function applyStage(r, patch){
+    // Optimistic: update the UI immediately so a single click responds instantly,
+    // then persist. (DB latency was making the first click feel unresponsive.)
+    Object.assign(r, patch);
+    renderJourney();
+    renderTable();
+    const { error } = await sb.from('repairs').update(patch).eq('id', r.id);
+    if(error){ showToast('Error saving: ' + error.message); }
+  }
+
+  // Work out the most recent completed step and how to revert it.
+  function lastStepInfo(r){
+    if(r.collected) return { label:'Collection', patch:{ collected:false, collected_at:null, collected_by:null, collected_branch:null, signature_url:null, collected_photo_url:null, is_courier:false, courier_address:null, waybill_url:null, stage: r.return_received_at ? 'return_received' : 'repair_done' } };
+    if(r.return_received_at) return { label:'Received at ' + (r.return_branch||'branch'), patch:{ return_received_at:null, return_received_by:null, stage:'in_transit_back' } };
+    if(r.transit_back_at) return { label:'Send to branch', patch:{ transit_back_at:null, return_branch:null, stage:'repair_done' } };
+    if(r.repair_done_at) return { label:'Repair done', patch:{ repair_done_at:null, stage: r.received_at ? 'received' : 'logged' } };
+    if(r.received_at) return { label:'Received in Cape Town', patch:{ received_at:null, received_by:null, received:false, stage: needsTransit(r) ? 'in_transit' : 'logged' } };
+    return null;
+  }
+
+  function confirmUndo(r, undo){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    const msg = document.createElement('div');
+    msg.style.cssText = 'font-size:0.85rem;';
+    msg.textContent = 'Undo "' + undo.label + '"? This reverts the last step.';
+    box.appendChild(msg);
+    const yes = jBtn('Yes, undo', 'background:#c0392b;color:#fff;');
+    yes.onclick = () => applyStage(r, undo.patch);
+    box.appendChild(yes);
+    const no = jBtn('Cancel', 'background:#2b3543;color:#cdd6e0;');
+    no.onclick = () => renderJourney();
+    box.appendChild(no);
+  }
+
+  function editNotes(r){
+    const box = document.getElementById('journeyActions');
+    box.innerHTML = '';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:0.85rem;font-weight:600;';
+    label.textContent = 'Notes (e.g. urgency, needed-by date):';
+    box.appendChild(label);
+    const ta = document.createElement('textarea');
+    ta.rows = 3; ta.value = r.notes || '';
+    ta.style.cssText = 'padding:10px;border:1px solid var(--gray-border,#ccc);border-radius:5px;font-size:0.9rem;font-family:inherit;resize:vertical;';
+    box.appendChild(ta);
+    const save = jBtn('Save notes');
+    save.onclick = () => applyStage(r, { notes: ta.value.trim() || null });
+    box.appendChild(save);
+    const cancel = jBtn('Cancel', 'background:#2b3543;color:#cdd6e0;');
+    cancel.onclick = () => renderJourney();
+    box.appendChild(cancel);
+    ta.focus();
+  }
+
 
   let renderInProgress = false;
   let renderPending = false;
@@ -2160,28 +2906,72 @@
 
     const allRows = repairs.filter(matchesSearch);
 
-    // PENDING / ACTIVE section
+    // Summary cards — a quick pulse of open repairs (respects the branch filter)
+    const summaryEl = document.getElementById('summaryCards');
+    if(summaryEl){
+      if(collectionMode){
+        summaryEl.style.display = 'none';
+      } else {
+        summaryEl.style.display = 'flex';
+        const openRows = repairs.filter(r => !r.collected && (activeFilter === 'All' || relevantBranch(r) === activeFilter));
+        const pendCount = openRows.filter(r => tabOf(r) === 'pending').length;
+        const actCount  = openRows.filter(r => tabOf(r) === 'active').length;
+        const urgCount  = openRows.filter(r => r.is_urgent).length;
+        const stkCount  = openRows.filter(r => isStuck(r)).length;
+        const tile = (num, label, color, action) =>
+          '<div class="summary-tile" data-action="' + action + '" style="flex:1;min-width:88px;background:#fff;border:1px solid var(--gray-border,#e3e7ec);border-left:4px solid ' + color + ';border-radius:11px;padding:11px 13px;cursor:pointer;transition:box-shadow .15s;">'
+          + '<div style="font-size:1.5rem;font-weight:700;color:' + color + ';line-height:1;">' + num + '</div>'
+          + '<div style="font-size:0.68rem;color:var(--gray-text,#5b6673);margin-top:4px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">' + label + '</div></div>';
+        summaryEl.innerHTML =
+          tile(pendCount, 'Pending', '#e8850c', 'pending') +
+          tile(actCount, 'Active', '#1565c0', 'active') +
+          tile(urgCount, 'Urgent', '#c0392b', 'urgent') +
+          tile(stkCount, 'Stuck', '#9a6b00', 'stuck');
+      }
+    }
+
+    // PENDING / ACTIVE section — split by stage, not just received flag
     let activeRows = allRows.filter(r => !r.collected);
     if(activeSection === 'pending'){
-      activeRows = activeRows.filter(r => !r.received);
+      activeRows = activeRows.filter(r => tabOf(r) === 'pending');
     } else if(activeSection === 'active'){
-      activeRows = activeRows.filter(r => r.received);
+      activeRows = activeRows.filter(r => tabOf(r) === 'active');
     }
-    // apply branch filter on top
+    // Branch filter uses where the repair currently is / is heading
     if(activeFilter !== 'All'){
-      activeRows = activeRows.filter(r => r.branch === activeFilter);
+      activeRows = activeRows.filter(r => relevantBranch(r) === activeFilter);
     }
+    // Optional "stuck only" filter
+    if(stuckOnly){
+      activeRows = activeRows.filter(r => isStuck(r));
+    }
+    // Sort: urgent first, then stuck, then newest logged
+    activeRows.sort((a,b) => {
+      if(!!b.is_urgent !== !!a.is_urgent) return (b.is_urgent?1:0) - (a.is_urgent?1:0);
+      const as = isStuck(a) ? 1 : 0, bs = isStuck(b) ? 1 : 0;
+      if(bs !== as) return bs - as;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
 
     const body = document.getElementById('repairsBody');
     const empty = document.getElementById('emptyState');
+    const aPagination = document.getElementById('activePagination');
     body.innerHTML = '';
 
     if(activeRows.length === 0){
       empty.style.display = 'block';
+      if(aPagination) aPagination.style.display = 'none';
     } else {
       empty.style.display = 'none';
 
-      activeRows.forEach(r => {
+      // Paginate — 10 per page, same as the Collected tab
+      const totalPages = Math.max(1, Math.ceil(activeRows.length / ACTIVE_PER_PAGE));
+      if(activePage > totalPages) activePage = totalPages;
+      if(activePage < 1) activePage = 1;
+      const startIdx = (activePage - 1) * ACTIVE_PER_PAGE;
+      const pageRows = activeRows.slice(startIdx, startIdx + ACTIVE_PER_PAGE);
+
+      pageRows.forEach(r => {
         const tr = document.createElement('tr');
 
         // Collection-station view: only Job # + Client name + a Collect button.
@@ -2196,51 +2986,56 @@
 
         if(r.is_loan_return) tr.classList.add('loan-row');
         const overdue = isOverdue(r);
-        let statusHtml;
-        if(r.received){
-          const receivedDate = r.received_at ? new Date(r.received_at).toLocaleString() : '';
-          statusHtml = `<span class="badge received">Received</span>${overdue ? '<span class="badge overdue">Not collected 3+ months</span>' : ''}${r.is_redo ? `<span class="badge redo">Returned for redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>` : ''}${r.is_loan_return && r.loan_return_disposition ? `<span class="badge redo">${r.loan_return_disposition === 'supplier' ? 'Going back to Supplier' : 'Going back to Store'}</span>` : ''}<br><span class="received-info">by ${escapeHtml(r.received_by||'')} &middot; ${escapeHtml(receivedDate)}</span>${r.is_redo && r.redo_returned_at ? `<br><span class="received-info">redo by ${escapeHtml(r.redo_returned_by||'')} &middot; ${escapeHtml(new Date(r.redo_returned_at).toLocaleString())}</span>` : ''}`;
-        } else {
-          statusHtml = `<span class="badge pending">Pending</span>`;
-        }
+        const stuck = isStuck(r);
+        let statusHtml = stageBadge(r);
+        if(r.is_urgent) statusHtml = '<span style="display:inline-block;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px;background:#c0392b;color:#fff;margin-bottom:3px;">🔴 URGENT</span><br>' + statusHtml;
+        if(stuck) statusHtml += '<br><span class="badge overdue" style="background:#fde8e8;color:#c0392b;border:1px solid #f5b5b5;">⚠ ' + escapeHtml(stuck) + '</span>';
+        if(overdue) statusHtml += '<br><span class="badge overdue">Not collected 3+ months</span>';
+        if(r.is_redo) statusHtml += `<br><span class="badge redo">Redo → ${escapeHtml(r.logged_by_branch||'origin')}</span>`;
 
-        let actionHtml = '';
-        if(!r.received){
-          actionHtml += `<button class="receive-btn" data-id="${r.id}" data-action="receive">Mark Received</button>`;
-        } else {
-          actionHtml += `<button class="collect-btn" data-id="${r.id}" data-action="collect">Mark Collected</button>`;
-          if(!r.is_redo){
-            actionHtml += `<button class="redo-btn" data-id="${r.id}" data-action="redo">Redo — Return to Origin</button>`;
-          }
-        }
+        let actionHtml = `<button class="journey-btn" data-id="${r.id}" style="background:#1d4f8a;color:#fff;border:none;border-radius:5px;padding:7px 12px;font-size:0.82rem;cursor:pointer;font-family:inherit;">Update ▸</button>`;
         actionHtml += `<button class="delete-btn" data-id="${r.id}" data-action="delete">Delete</button>`;
 
         tr.innerHTML = `
-          <td data-label="To Branch">${escapeHtml(r.branch)}</td>
+          <td data-label="To Branch" style="border-left:4px solid ${stageStripColor(r)};">${escapeHtml(relevantBranch(r)||'—')}</td>
           <td data-label="Logged By">${escapeHtml(r.logged_by_branch||'—')}</td>
           <td data-label="Job #">${escapeHtml(r.job_number)}</td>
-          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}</td>
+          <td data-label="Item">${escapeHtml(r.item)}${r.is_courier ? `<br><span class="received-info">🚚 Courier: ${escapeHtml(r.courier_address||'')}</span>` : ''}${r.is_buyin ? `<br><span class="badge redo" style="background:#e7f0e0;color:#2c6e2c;">Buy-in</span><br><span class="received-info">Stock: ${escapeHtml(r.stock_code||'—')} · Doc: ${escapeHtml(r.used_gear_doc||'—')}</span>` : ''}${r.notes ? `<br><span style="display:inline-block;margin-top:3px;font-size:0.75rem;color:#f0b060;background:rgba(232,133,12,.14);border:1px solid rgba(232,133,12,.32);border-radius:4px;padding:2px 6px;">📝 ${escapeHtml(r.notes)}</span>` : ''}</td>
           <td data-label="Name">${escapeHtml(r.name)}</td>
           <td data-label="Contact">${escapeHtml(r.contact_number||'')}</td>
-          <td data-label="Status">${statusHtml}</td>
+          <td data-label="Stage">${statusHtml}</td>
           <td data-label="">${actionHtml}</td>
         `;
+        tr.style.borderLeft = '4px solid ' + stageStripColor(r);
         body.appendChild(tr);
       });
+
+      // Pagination controls
+      if(activeRows.length > ACTIVE_PER_PAGE){
+        aPagination.style.display = 'flex';
+        document.getElementById('activePageInfo').textContent =
+          `Page ${activePage} of ${totalPages}  ·  ${activeRows.length} repairs`;
+        document.getElementById('activePrev').disabled = (activePage <= 1);
+        document.getElementById('activeNext').disabled = (activePage >= totalPages);
+        document.getElementById('activePrev').style.opacity = (activePage <= 1) ? '0.4' : '1';
+        document.getElementById('activeNext').style.opacity = (activePage >= totalPages) ? '0.4' : '1';
+      } else {
+        aPagination.style.display = 'none';
+      }
     }
 
-    document.querySelectorAll('.receive-btn').forEach(btn => {
-      btn.addEventListener('click', () => openReceiveModal(btn.dataset.id));
-    });
-    document.querySelectorAll('.collect-btn').forEach(btn => {
-      btn.addEventListener('click', () => openCollectModal(btn.dataset.id));
-    });
-    document.querySelectorAll('.redo-btn').forEach(btn => {
-      btn.addEventListener('click', () => openRedoModal(btn.dataset.id));
-    });
-    document.querySelectorAll('#repairsBody .delete-btn').forEach(btn => {
-      btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
-    });
+    // Event delegation (attached once): survives table re-renders, so a
+    // background refresh can never swallow a click on Update/Delete/etc.
+    if(!window._repairsBodyDelegated){
+      window._repairsBodyDelegated = true;
+      document.getElementById('repairsBody').addEventListener('click', (e) => {
+        const jb = e.target.closest('.journey-btn');  if(jb){ openJourney(jb.dataset.id); return; }
+        const rb = e.target.closest('.receive-btn');  if(rb){ openReceiveModal(rb.dataset.id); return; }
+        const cb = e.target.closest('.collect-btn');  if(cb){ openCollectModal(cb.dataset.id); return; }
+        const rd = e.target.closest('.redo-btn');     if(rd){ openRedoModal(rd.dataset.id); return; }
+        const del = e.target.closest('.delete-btn');  if(del){ openDeleteModal(del.dataset.id); return; }
+      });
+    }
 
     // COLLECTED section
     let collectedRows = allRows.filter(r => r.collected);
@@ -2313,8 +3108,8 @@
   } // end _doRender
 
   async function openStorageFile(path, bucket, linkEl, title){
-    const originalText = linkEl.textContent;
-    linkEl.textContent = 'Loading…';
+    const originalText = linkEl ? linkEl.textContent : '';
+    if(linkEl) linkEl.textContent = 'Loading…';
 
     // Show the modal immediately with a loading state
     document.getElementById('viewerTitle').textContent = title || 'Preview';
@@ -2339,16 +3134,18 @@
       }
     }
 
-    linkEl.textContent = originalText;
+    if(linkEl) linkEl.textContent = originalText;
 
     if(signedUrl){
       signedUrlCache.set(cacheKey, { url: signedUrl, expiresAt: Date.now() + 55*60*1000 });
       const isPdf = /\.pdf(\?|$)/i.test(path);
+      const dlUrl = signedUrl + (signedUrl.includes('?') ? '&' : '?') + 'download';
+      const dlLink = `<a href="${escapeHtml(dlUrl)}" style="display:inline-block;margin-top:12px;font-size:0.82rem;color:var(--accent, #1d4f8a);text-decoration:underline;">⬇ Download file</a>`;
       const body = document.getElementById('viewerBody');
       if(isPdf){
-        body.innerHTML = `<div style="text-align:center;"><p style="font-size:0.85rem;color:var(--gray-text);margin-bottom:10px;">PDF document</p><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener" style="color:var(--accent, #1d4f8a);text-decoration:underline;">Open PDF in new tab</a></div>`;
+        body.innerHTML = `<div style="text-align:center;"><p style="font-size:0.85rem;color:var(--gray-text);margin-bottom:10px;">PDF document</p><a href="${escapeHtml(signedUrl)}" target="_blank" rel="noopener" style="color:var(--accent, #1d4f8a);text-decoration:underline;">Open PDF in new tab</a><br>${dlLink}</div>`;
       } else {
-        body.innerHTML = `<img src="${escapeHtml(signedUrl)}" alt="Preview" style="max-width:100%;max-height:60vh;border-radius:6px;border:1px solid var(--gray-border);">`;
+        body.innerHTML = `<div style="text-align:center;"><img src="${escapeHtml(signedUrl)}" alt="Preview" style="max-width:100%;max-height:58vh;border-radius:6px;border:1px solid var(--gray-border);"><br>${dlLink}</div>`;
       }
     } else {
       document.getElementById('viewerModal').classList.remove('show');
